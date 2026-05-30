@@ -26,6 +26,16 @@ dependencies = [
     "certifi>=2024.2.2",
 ]
 
+[project.optional-dependencies]
+# Real-LLM integration test harness (tests/llm). `anthropic` is lazy-imported,
+# so it is only needed when LLM_PROVIDER=anthropic.
+llm = [
+    "openai>=1.50",
+    "anthropic>=0.40",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
 [project.urls]
 Repository = "https://github.com/YOONPYOGitHub/yonsei-portal-MCP"
 Issues = "https://github.com/YOONPYOGitHub/yonsei-portal-MCP/issues"
@@ -40,3 +50,13 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/yonsei_portal_mcp"]
 artifacts = ["src/yonsei_portal_mcp/_certs/*.pem"]
+
+[tool.pytest.ini_options]
+# Only collect the LLM harness so the manual smoke scripts in tests/ (which log
+# in to the real portal on import) are never auto-imported by pytest.
+testpaths = ["tests/llm"]
+asyncio_mode = "auto"
+markers = [
+    "llm: requires a real LLM provider (skipped when no API key is configured)",
+    "live: hits the real Yonsei portal AND a real LLM (opt-in via RUN_LIVE_LLM=1)",
+]

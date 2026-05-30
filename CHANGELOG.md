@@ -4,6 +4,21 @@
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)을 따르며,
 버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [Unreleased]
+
+### Added
+- LLM 통합 테스트 하니스(`tests/llm/`): 실제 LLM이 MCP 도구를 스스로 선택·호출해
+  답변하는지 검증. 다중 제공자 추상화(`azure-openai`/`openai`/`anthropic`/`stub`),
+  인메모리 MCP 세션, 픽션 fixtures, L1(stub)·L2(실LLM)·L3(라이브) 계층 테스트.
+- 대화 데모 러너(`tests/llm/demo.py`): 인터랙티브 채팅 모드(`--chat`),
+  라이브 모드(`--live`, `RUN_LIVE_LLM=1` 필요), 제공자 선택(`--provider`).
+- `pyproject.toml` 선택 의존성 그룹 `llm`(openai/anthropic/pytest)과
+  pytest 설정(`testpaths`, `asyncio_mode`, `llm`/`live` 마커).
+- `.env.example` 에 LLM 제공자 설정 섹션 추가(Azure OpenAI keyless/APIM 자동 판별 안내).
+
+### Changed
+- `.env.example` placeholder 표기를 `<your-...>` 스타일로 통일.
+
 ## [0.3.0] - 2026-05-31
 
 ### Added

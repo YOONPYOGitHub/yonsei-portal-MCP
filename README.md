@@ -103,6 +103,54 @@ npx @modelcontextprotocol/inspector uv run yonsei-portal-mcp
 최초 로그인 시 `YONSEI_HEADED=true` 로 두면 브라우저 창이 떠서 2단계 인증을
 직접 처리할 수 있고, 이후 세션이 저장됩니다.
 
+## LLM 통합 테스트 / 대화 데모
+
+실제 LLM이 이 MCP 서버의 도구를 **스스로 선택·호출**해 한국어로 답하는지
+확인할 수 있는 하니스가 `tests/llm/` 에 있습니다. 추가 의존성은 선택 그룹으로
+분리되어 있습니다:
+
+```bash
+uv sync --extra llm     # openai / anthropic / pytest 등 테스트 전용 의존성
+```
+
+LLM 제공자는 `.env` 의 `LLM_PROVIDER` 로 고릅니다
+(`azure-openai` | `openai` | `anthropic` | `stub`). 각 제공자 설정 키는
+`.env.example` 의 주석을 참고하세요. Azure OpenAI는 **keyless(APIM)** 와
+**AOAI 키** 두 방식을 입력한 키에 따라 자동 판별합니다
+(`AZURE_OPENAI_API_KEY` 가 비어 있으면 APIM 구독키로 대체).
+
+### 대화 데모 (`tests/llm/demo.py`)
+
+```bash
+# 한 번에 질문 1개
+uv run python -m tests.llm.demo "이번 학기 시간표 알려줘"
+
+# 인터랙티브 채팅(계속 타이핑; 빈 줄 또는 exit 로 종료)
+uv run python -m tests.llm.demo --chat
+
+# 제공자 강제 지정
+uv run python -m tests.llm.demo --provider azure-openai --chat
+
+# API 키 없이 동작하는 스크립트 stub 제공자
+uv run python -m tests.llm.demo --provider stub --tool get_my_loans "책 목록"
+```
+
+| 모드 | 명령 | 도구 데이터 | LLM | 포털 로그인 |
+| --- | --- | --- | --- | --- |
+| stub | `--provider stub --chat` | 모의 fixtures | 가짜(키 불필요) | ❌ |
+| mocked(기본) | `--chat` | 모의 fixtures | 실제 LLM | ❌ |
+| LIVE | `--live --chat` | **실제 포털 크롤링** | 실제 LLM | ✅ |
+
+> ⚠️ `--live` 는 **실제 포털 로그인 + 본인 학사정보를 클라우드 LLM으로 전송**합니다.
+> 안전장치로 `.env` 에 `RUN_LIVE_LLM=1` 을 설정해야만 실행됩니다.
+
+### pytest
+
+```bash
+uv run pytest tests/llm -v            # L1(stub) 항상 실행, L2는 키 없으면 skip
+uv run pytest tests/llm -v -m llm     # 실제 LLM 호출 테스트만
+```
+
 ## 클라이언트 등록
 
 ### Claude Desktop (`claude_desktop_config.json`)
