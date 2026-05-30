@@ -1,0 +1,15 @@
+# Secrets - NEVER commit credentials
+.env
+*.env
+.auth/
+.session/
+storage_state.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS
+.DS_Store

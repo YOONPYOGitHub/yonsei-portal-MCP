@@ -1,0 +1,1 @@
+"""Yonsei Portal MCP package."""
