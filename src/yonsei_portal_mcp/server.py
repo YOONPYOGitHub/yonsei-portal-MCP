@@ -47,8 +47,17 @@ async def get_lms_deadlines(course_id: Optional[str] = None) -> list[dict]:
     """다가오는 과제/활동 마감일(LearnUs 달력의 '예정된 할 일')을 반환합니다.
 
     course_id 를 주면 해당 강좌의 마감일만 돌려줍니다. 각 항목: 제목(title),
-    마감 ISO 시각(due), 원문 마감 문구(due_text), 강좌 id/이름(course_id/course),
-    출처(source), 상세 URL(url). 결과는 마감 임박 순으로 정렬됩니다.
+    마감 ISO 시각(due), 원문 마감 문구(due_text), 종류(kind), 강좌 id/이름
+    (course_id/course), 출처(source), 상세 URL(url). 결과는 마감 임박 순으로
+    정렬됩니다.
+
+    kind 값에 주의하세요. LearnUs '예정된 할 일' 달력에는 실제 제출 과제뿐 아니라
+    온라인 강의 진도/수료 마커가 섞여 있습니다.
+    - "assignment": 실제 제출해야 하는 과제/활동 마감.
+    - "progress": 온라인 강의 수강기간(동영상 진도) 종료 시점. 제출 과제가 아님.
+    - "completion": 온라인 과정 수료 권장일(예: 연구윤리). 제출 과제가 아님.
+    사용자에게 안내할 때 progress/completion 항목을 '과제 마감'이라고 부르지 말고
+    '강의 진도/수료 마감'으로 구분해 설명하세요.
     """
     key = ("get_lms_deadlines", _account(), course_id)
     return await cache.cached(

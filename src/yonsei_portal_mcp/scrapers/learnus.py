@@ -261,6 +261,27 @@ async def fetch_notices(page: Page, scope: str = "all") -> list[dict]:
     return notices
 
 
+def _deadline_kind(title: Optional[str]) -> str:
+    """Classify a LearnUs calendar entry by what kind of due date it is.
+
+    The "upcoming" calendar mixes real submissions with auto-generated online
+    lecture markers, so callers (and the LLM) must not present them all as
+    homework. Returns one of:
+
+    - ``"completion"`` — online course completion marker ("should be completed",
+      e.g. 온라인 연구윤리 수료 권장일). Not a submittable assignment.
+    - ``"progress"`` — lecture/video viewing cutoff (": Progress stop",
+      강의 수강기간 종료). Not a submittable assignment.
+    - ``"assignment"`` — a real assignment/activity submission deadline.
+    """
+    t = (title or "").lower()
+    if "should be completed" in t:
+        return "completion"
+    if "progress stop" in t:
+        return "progress"
+    return "assignment"
+
+
 async def fetch_deadlines(
     page: Page,
     course_map: Optional[dict[str, str]] = None,
@@ -269,9 +290,12 @@ async def fetch_deadlines(
     """Return upcoming assignment / activity deadlines from the calendar.
 
     Each item carries a ``source`` field (DESIGN §4-ter) so callers can tell
-    where a deadline came from. Items are de-duplicated by ``url`` and sorted by
-    ``due`` ascending (items without a due time sink to the end). Pass
-    ``course_id`` to restrict the result to a single course.
+    where a deadline came from, plus a ``kind`` field
+    (``assignment`` / ``progress`` / ``completion``; see :func:`_deadline_kind`)
+    so callers can distinguish real submissions from online-lecture progress or
+    completion markers. Items are de-duplicated by ``url`` and sorted by ``due``
+    ascending (items without a due time sink to the end). Pass ``course_id`` to
+    restrict the result to a single course.
     """
     if course_map is None:
         course_map = await _course_name_map(page)
@@ -291,6 +315,7 @@ async def fetch_deadlines(
             "title": e.get("title"),
             "due": due_iso,
             "due_text": e.get("when"),
+            "kind": _deadline_kind(e.get("title")),
             "course_id": cid,
             "course": course_map.get(cid) if cid else None,
             "url": e.get("url"),
