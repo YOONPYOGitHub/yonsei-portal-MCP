@@ -1,6 +1,6 @@
 [project]
 name = "yonsei-portal-mcp"
-version = "0.3.0"
+version = "0.4.0"
 description = "연세대학교 포털/LearnUs/도서관 조회용 MCP 서버 (read-only)"
 readme = "README.md"
 requires-python = ">=3.10"

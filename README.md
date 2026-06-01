@@ -17,6 +17,7 @@ Playwright(Chromium)로 연세포털 SSO 로그인을 자동화하고, 강좌·�
 | `search_notices` | 🔒 | 공지 통합 검색 (키워드 AND 매칭, `scope`/`limit`) |
 | `get_notice` | 🔒 | 단일 공지/게시글 본문 전체 |
 | `get_lms_attendance` | 🔒 | 특정 강좌의 주차별 출석/학습 현황 (`course_id` 필요) |
+| `get_lms_course_materials` | 🔒 | 특정 강좌의 주차별 학습활동/자료 목록 (`course_id` 필요) |
 | `get_lms_overview` | 🔒 | 강좌 + 마감일 + 최근 강좌 공지 종합 요약 |
 | `get_my_loans` | 🔒 | 도서관 개인 대출현황 (반납예정일·연장횟수 등) |
 | `export_calendar_ics` | 🔒* | 마감일·반납예정일을 iCalendar(.ics)로 내보내기 |
@@ -106,49 +107,49 @@ npx @modelcontextprotocol/inspector uv run yonsei-portal-mcp
 ## LLM 통합 테스트 / 대화 데모
 
 실제 LLM이 이 MCP 서버의 도구를 **스스로 선택·호출**해 한국어로 답하는지
-확인할 수 있는 하니스가 `tests/llm/` 에 있습니다. 추가 의존성은 선택 그룹으로
-분리되어 있습니다:
+확인할 수 있는 하니스가 `tests/llm/` 에 있습니다. 목업/픽스처는 제거되어
+**실제 연세포털에 로그인해 실데이터로만** 검증합니다. 추가 의존성은 선택
+그룹으로 분리되어 있습니다:
 
 ```bash
 uv sync --extra llm     # openai / anthropic / pytest 등 테스트 전용 의존성
 ```
 
 LLM 제공자는 `.env` 의 `LLM_PROVIDER` 로 고릅니다
-(`azure-openai` | `openai` | `anthropic` | `stub`). 각 제공자 설정 키는
+(`azure-openai` | `openai` | `anthropic`). 각 제공자 설정 키는
 `.env.example` 의 주석을 참고하세요. Azure OpenAI는 **keyless(APIM)** 와
 **AOAI 키** 두 방식을 입력한 키에 따라 자동 판별합니다
 (`AZURE_OPENAI_API_KEY` 가 비어 있으면 APIM 구독키로 대체).
+
+> ⚠️ 모든 하니스(데모/시나리오/pytest)는 **실제 포털 로그인 + 본인 학사정보를
+> 클라우드 LLM으로 전송**합니다. 안전장치로 `.env` 에 `RUN_LIVE_LLM=1` 을
+> 설정해야만 실행됩니다.
 
 ### 대화 데모 (`tests/llm/demo.py`)
 
 ```bash
 # 한 번에 질문 1개
-uv run python -m tests.llm.demo "이번 학기 시간표 알려줘"
+RUN_LIVE_LLM=1 uv run python -m tests.llm.demo "이번 학기 시간표 알려줘"
 
 # 인터랙티브 채팅(계속 타이핑; 빈 줄 또는 exit 로 종료)
-uv run python -m tests.llm.demo --chat
+RUN_LIVE_LLM=1 uv run python -m tests.llm.demo --chat
 
 # 제공자 강제 지정
-uv run python -m tests.llm.demo --provider azure-openai --chat
-
-# API 키 없이 동작하는 스크립트 stub 제공자
-uv run python -m tests.llm.demo --provider stub --tool get_my_loans "책 목록"
+RUN_LIVE_LLM=1 uv run python -m tests.llm.demo --provider azure-openai --chat
 ```
 
-| 모드 | 명령 | 도구 데이터 | LLM | 포털 로그인 |
-| --- | --- | --- | --- | --- |
-| stub | `--provider stub --chat` | 모의 fixtures | 가짜(키 불필요) | ❌ |
-| mocked(기본) | `--chat` | 모의 fixtures | 실제 LLM | ❌ |
-| LIVE | `--live --chat` | **실제 포털 크롤링** | 실제 LLM | ✅ |
+### 시나리오 일괄 검증 (`tests/llm/scenarios.py`)
 
-> ⚠️ `--live` 는 **실제 포털 로그인 + 본인 학사정보를 클라우드 LLM으로 전송**합니다.
-> 안전장치로 `.env` 에 `RUN_LIVE_LLM=1` 을 설정해야만 실행됩니다.
+```bash
+# 13개 한국어 질의를 실제 포털에 붙여 도구 선택을 채점
+RUN_LIVE_LLM=1 uv run python -m tests.llm.scenarios
+```
 
 ### pytest
 
 ```bash
-uv run pytest tests/llm -v            # L1(stub) 항상 실행, L2는 키 없으면 skip
-uv run pytest tests/llm -v -m llm     # 실제 LLM 호출 테스트만
+# 실제 포털+LLM E2E 테스트 (RUN_LIVE_LLM=1 미설정 시 skip)
+RUN_LIVE_LLM=1 uv run pytest tests/llm -v
 ```
 
 ## 클라이언트 등록

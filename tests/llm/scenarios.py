@@ -1,15 +1,18 @@
 """Scenario test runner for the LLM <-> MCP harness.
 
 Runs a batch of realistic Korean questions through the *real* LLM
-(``LLM_PROVIDER``) against the in-memory MCP server with **mocked fixtures**
-(no portal login, no real PII). For each scenario it records which MCP tools
-the model chose and the final answer, then scores tool selection against an
-``expected`` set of acceptable tools.
+(``LLM_PROVIDER``) against the **real** MCP server over stdio (real portal
+login + scraping). For each scenario it records which MCP tools the model chose
+and the final answer, then scores tool selection against an ``expected`` set of
+acceptable tools.
+
+This logs in to the live portal and sends the resulting real data to the
+configured LLM, so it is gated behind ``RUN_LIVE_LLM=1``.
 
 Usage::
 
-    uv run python -m tests.llm.scenarios            # uses LLM_PROVIDER from .env
-    uv run python -m tests.llm.scenarios --provider azure-openai
+    RUN_LIVE_LLM=1 uv run python -m tests.llm.scenarios
+    RUN_LIVE_LLM=1 uv run python -m tests.llm.scenarios --provider azure-openai
 
 Exit code is the number of FAILED scenarios (0 = all good).
 """
@@ -25,11 +28,11 @@ import time
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    load_dotenv(override=True)
 except ImportError:  # pragma: no cover
     pass
 
-from .mcp_host import inmemory_client, run_agent, stdio_client_session
+from .mcp_host import run_agent, stdio_client_session
 from .providers import ProviderUnavailable, make_provider
 
 
@@ -48,6 +51,7 @@ SCENARIOS: list[tuple[str, str, set[str]]] = [
     ("notices", "최근 공지사항 보여줘", {"get_lms_notices", "search_notices"}),
     ("search_notice", "장학금 관련 공지 검색해줘", {"search_notices", "get_lms_notices"}),
     ("attendance", "인공지능 과목 출석 현황 알려줘", {"get_lms_attendance", "get_lms_courses"}),
+    ("course_materials", "인공지능 과목 주차별 강의자료 목록 알려줘", {"get_lms_course_materials", "get_lms_courses"}),
     ("export_ics", "내 과제 마감이랑 도서 반납일을 캘린더 파일로 내보내줘", {"export_calendar_ics"}),
 ]
 
@@ -77,7 +81,7 @@ async def _main(args: argparse.Namespace) -> int:
         print(f"[scenarios] provider unavailable: {exc}", flush=True)
         return 99
 
-    if args.live and os.getenv("RUN_LIVE_LLM") != "1":
+    if os.getenv("RUN_LIVE_LLM") != "1":
         print(
             "[scenarios] refusing live run: set RUN_LIVE_LLM=1 to confirm "
             "(real portal login + real data sent to the LLM)",
@@ -85,19 +89,13 @@ async def _main(args: argparse.Namespace) -> int:
         )
         return 98
 
-    mode = "LIVE portal (real login + real data)" if args.live else "mocked fixtures (no portal login)"
     print(f"[scenarios] provider = {provider.name}", flush=True)
-    print(f"[scenarios] mode     = {mode}", flush=True)
+    print("[scenarios] mode     = LIVE portal (real login + real data)", flush=True)
     print(f"[scenarios] count    = {len(SCENARIOS)}", flush=True)
     print("=" * 72, flush=True)
 
-    def _open_session():
-        if args.live:
-            return stdio_client_session()
-        return inmemory_client(mock_tools=True)
-
     results: list[dict] = []
-    async with _open_session() as session:
+    async with stdio_client_session() as session:
         for sid, question, expected in SCENARIOS:
             res = await _run_one(session, provider, question)
             called = set(res["tools"])
@@ -131,13 +129,7 @@ def main() -> None:
     p.add_argument(
         "--provider",
         default=os.getenv("LLM_PROVIDER", "azure-openai"),
-        help="azure-openai | openai | anthropic | stub (default: LLM_PROVIDER)",
-    )
-    p.add_argument(
-        "--live",
-        action="store_true",
-        help="use the REAL MCP server over stdio (real portal login + scraping; "
-        "requires RUN_LIVE_LLM=1)",
+        help="azure-openai | openai | anthropic (default: LLM_PROVIDER)",
     )
     args = p.parse_args()
     sys.exit(asyncio.run(_main(args)))

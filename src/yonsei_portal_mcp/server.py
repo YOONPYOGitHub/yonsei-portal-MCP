@@ -167,6 +167,30 @@ async def get_lms_attendance(course_id: str) -> dict:
         ),
     )
 
+@mcp.tool()
+async def get_lms_course_materials(course_id: str) -> dict:
+    """특정 강좌의 주차별 학습활동/자료(강의 콘텐츠) 목록을 반환합니다.
+
+    course_id 는 get_lms_courses 가 돌려준 강좌 id 입니다. LearnUs 강좌 페이지의
+    '강의 개요'와 주차별 섹션을 읽어, 각 섹션의 활동(동영상/강의자료 파일/과제/
+    게시판 등)을 그대로 돌려줍니다. 시험 범위에 맞춰 실제 강의자료를 근거로
+    학습 체크리스트를 만드는 등, 모델이 추측하지 않고 실제 콘텐츠에 기반해
+    답하도록 돕습니다.
+
+    반환값: course_id, section_count, activity_count, sections. 각 section 은
+    id, week(주차 번호, 강의 개요는 null), name, activities 를 가지며 각 activity
+    는 type(Moodle 모듈 유형: vod/ubfile/assign/ubboard 등), title, url 을
+    포함합니다. sections 는 주차 순으로 정렬되고 강의 개요(week=null)가 맨 앞에
+    옵니다.
+    """
+    key = ("get_lms_course_materials", _account(), course_id)
+    return await cache.cached(
+        key,
+        cache.COURSE_MATERIALS_TTL,
+        lambda: get_session().run(
+            lambda page: learnus.fetch_course_materials(page, course_id)
+        ),
+    )
 
 @mcp.tool()
 async def get_lms_overview() -> dict:

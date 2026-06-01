@@ -1,24 +1,19 @@
-"""Transport-agnostic MCP host: agent loop + in-memory / stdio client sessions.
+"""Transport-agnostic MCP host: agent loop + stdio client session.
 
 The agent loop speaks the OpenAI-canonical message format (see
-``providers.py``) and is independent of which provider produced a turn and of
-which transport carries the MCP session, so the same loop drives:
-
-* L1 — :class:`~providers.StubProvider` + in-memory fixture tools
-* L2 — a real provider + in-memory fixture tools (no portal login, no PII)
-* L3 — a real provider + a real stdio server (real portal login; opt-in)
+``providers.py``) and is independent of which provider produced a turn, so the
+same loop drives a real provider against a real stdio server (real portal
+login; opt-in via ``RUN_LIVE_LLM=1``).
 """
 from __future__ import annotations
 
 import json
 import os
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
-from unittest import mock
 
 from mcp import ClientSession
-from mcp.shared.memory import create_connected_server_and_client_session
 
 from .providers import AssistantTurn, Provider, ToolCall
 
@@ -150,109 +145,7 @@ async def run_agent(
 
 
 # ---------------------------------------------------------------------------
-# In-memory client (L1/L2) — optionally patch scrapers with fixtures
-# ---------------------------------------------------------------------------
-
-
-class _FakeSession:
-    """Stand-in for the Playwright-backed session: ``run(action)`` -> action(page)."""
-
-    async def run(self, action):
-        return await action(None)
-
-
-def _apply_fixture_patches(stack: AsyncExitStack) -> None:
-    """Patch cache + session factories + scrapers so tools return fixtures."""
-    from yonsei_portal_mcp import cache, server
-    from yonsei_portal_mcp.scrapers import erp, learnus, library, seats
-
-    from . import fixtures as fx
-
-    async def _no_cache(key, ttl, producer):
-        return await producer()
-
-    def patch(target, attr, value):
-        stack.enter_context(mock.patch.object(target, attr, value))
-
-    patch(cache, "cached", _no_cache)
-    patch(server, "get_session", lambda: _FakeSession())
-    patch(server, "get_erp_session", lambda: _FakeSession())
-    patch(server, "get_library_session", lambda: _FakeSession())
-
-    async def courses(page=None, **k):
-        return fx.COURSES
-
-    async def deadlines(page=None, course_id=None, **k):
-        data = fx.DEADLINES
-        if course_id:
-            data = [d for d in data if d["course_id"] == course_id]
-        return data
-
-    async def notices(page=None, scope="all", **k):
-        return fx.notices(scope)
-
-    async def notice_body(page=None, url=None, **k):
-        return fx.NOTICE_BODY
-
-    async def attendance(page=None, course_id=None, **k):
-        return fx.ATTENDANCE
-
-    patch(learnus, "fetch_courses", courses)
-    patch(learnus, "fetch_deadlines", deadlines)
-    patch(learnus, "fetch_notices", notices)
-    patch(learnus, "fetch_notice_body", notice_body)
-    patch(learnus, "fetch_attendance", attendance)
-
-    async def loans(page=None, **k):
-        return fx.LOANS
-
-    async def seat_rooms(page=None, **k):
-        return fx.SEAT_ROOMS
-
-    patch(library, "fetch_my_loans", loans)
-    patch(library, "fetch_seat_rooms", seat_rooms)
-
-    async def fetch_seats(seat_type=None, **k):
-        return fx.seats(seat_type)
-
-    patch(seats, "fetch_seats", fetch_seats)
-
-    async def profile(page=None, **k):
-        return fx.PROFILE
-
-    async def timetable(page=None, **k):
-        return fx.TIMETABLE
-
-    async def grades(page=None, **k):
-        return fx.GRADES
-
-    patch(erp, "fetch_student_profile", profile)
-    patch(erp, "fetch_timetable", timetable)
-    patch(erp, "fetch_grades", grades)
-
-
-@asynccontextmanager
-async def inmemory_client(*, mock_tools: bool = True) -> AsyncIterator[ClientSession]:
-    """Yield a ClientSession wired to the real FastMCP server in-process.
-
-    When ``mock_tools`` is True the scrapers are patched with fixtures, so no
-    network/login/PII is involved (L1/L2). When False the tools hit the real
-    portal (used by an explicitly opted-in caller).
-    """
-    from yonsei_portal_mcp import server
-
-    async with AsyncExitStack() as stack:
-        if mock_tools:
-            _apply_fixture_patches(stack)
-        client = await stack.enter_async_context(
-            create_connected_server_and_client_session(server.mcp._mcp_server)
-        )
-        await client.initialize()
-        yield client
-
-
-# ---------------------------------------------------------------------------
-# stdio client (L3) — real server subprocess, real portal login
+# stdio client (live) — real server subprocess, real portal login
 # ---------------------------------------------------------------------------
 
 

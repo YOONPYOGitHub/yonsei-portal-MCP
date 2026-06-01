@@ -8,10 +8,9 @@ that canonical form to/from its own wire format inside ``complete``.
 Selection order for :func:`make_provider`:
 
 1. the explicit ``name`` argument, else
-2. the ``LLM_PROVIDER`` environment variable, else
-3. ``"stub"`` (no network, always available).
+2. the ``LLM_PROVIDER`` environment variable.
 
-Supported names: ``azure-openai``, ``openai``, ``anthropic``, ``stub``.
+Supported names: ``azure-openai``, ``openai``, ``anthropic``.
 """
 from __future__ import annotations
 
@@ -51,52 +50,6 @@ class Provider(Protocol):
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> AssistantTurn:
         ...
-
-
-# ---------------------------------------------------------------------------
-# Stub (no network) — drives the agent loop deterministically for L1 tests.
-# ---------------------------------------------------------------------------
-
-
-class StubProvider:
-    """Scripted provider needing no API key.
-
-    On the first turn it emits ``planned_calls``; once any tool result is in the
-    transcript it emits ``final_text`` (optionally echoing the tool output).
-    """
-
-    name = "stub"
-
-    def __init__(
-        self,
-        planned_calls: list[tuple[str, dict[str, Any]]] | None = None,
-        final_text: str = "[stub] 요청을 처리했습니다.",
-        echo_tool_output: bool = True,
-    ) -> None:
-        self._planned = planned_calls or []
-        self._final_text = final_text
-        self._echo = echo_tool_output
-
-    async def complete(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
-    ) -> AssistantTurn:
-        has_tool_result = any(m.get("role") == "tool" for m in messages)
-        if not has_tool_result and self._planned:
-            calls = [
-                ToolCall(id=f"stub-{i}", name=name, arguments=args)
-                for i, (name, args) in enumerate(self._planned)
-            ]
-            return AssistantTurn(text=None, tool_calls=calls)
-
-        text = self._final_text
-        if self._echo and has_tool_result:
-            last = next(
-                (m for m in reversed(messages) if m.get("role") == "tool"), None
-            )
-            if last and last.get("content"):
-                snippet = str(last["content"])[:200]
-                text = f"{self._final_text}\n{snippet}"
-        return AssistantTurn(text=text, tool_calls=[])
 
 
 # ---------------------------------------------------------------------------
@@ -297,15 +250,19 @@ class AnthropicProvider:
 
 
 def make_provider(name: str | None = None) -> Provider:
-    """Build a provider from ``name`` (arg > ``LLM_PROVIDER`` env > ``stub``).
+    """Build a provider from ``name`` (arg > ``LLM_PROVIDER`` env).
 
-    Raises :class:`ProviderUnavailable` if the selected provider is missing
-    required configuration so tests can skip cleanly.
+    Raises :class:`ProviderUnavailable` if no provider is configured or the
+    selected provider is missing required configuration so tests can skip
+    cleanly.
     """
-    selected = (name or os.getenv("LLM_PROVIDER") or "stub").strip().lower()
+    selected = (name or os.getenv("LLM_PROVIDER") or "").strip().lower()
 
-    if selected == "stub":
-        return StubProvider()
+    if not selected:
+        raise ProviderUnavailable(
+            "no LLM provider configured: set LLM_PROVIDER "
+            "(azure-openai | openai | anthropic)"
+        )
 
     if selected == "azure-openai":
         endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")

@@ -22,7 +22,7 @@ import sys
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    load_dotenv(override=True)
 except ImportError:  # pragma: no cover
     pass
 

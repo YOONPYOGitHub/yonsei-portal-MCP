@@ -6,17 +6,27 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-01
+
 ### Added
+- `get_lms_course_materials` — 특정 강좌의 주차별 학습활동/자료 목록(동영상/강의자료
+  파일/과제/게시판)을 LearnUs 강좌 페이지에서 읽어오는 도구. 시험 범위에 맞춰
+  실제 강의 콘텐츠를 근거로 답하도록(예: 학습 체크리스트) 모델을 지원.
 - LLM 통합 테스트 하니스(`tests/llm/`): 실제 LLM이 MCP 도구를 스스로 선택·호출해
-  답변하는지 검증. 다중 제공자 추상화(`azure-openai`/`openai`/`anthropic`/`stub`),
-  인메모리 MCP 세션, 픽션 fixtures, L1(stub)·L2(실LLM)·L3(라이브) 계층 테스트.
+  답변하는지 검증. 다중 제공자 추상화(`azure-openai`/`openai`/`anthropic`),
+  실제 MCP 서버에 stdio로 붙는 라이브 시나리오·데모.
 - 대화 데모 러너(`tests/llm/demo.py`): 인터랙티브 채팅 모드(`--chat`),
-  라이브 모드(`--live`, `RUN_LIVE_LLM=1` 필요), 제공자 선택(`--provider`).
+  제공자 선택(`--provider`). 라이브 실행은 `RUN_LIVE_LLM=1` 안전 게이트로 보호.
 - `pyproject.toml` 선택 의존성 그룹 `llm`(openai/anthropic/pytest)과
   pytest 설정(`testpaths`, `asyncio_mode`, `llm`/`live` 마커).
 - `.env.example` 에 LLM 제공자 설정 섹션 추가(Azure OpenAI keyless/APIM 자동 판별 안내).
 
 ### Changed
+- 도구 수 14개 → 15개(`get_lms_course_materials` 추가).
+- LLM 하니스를 라이브 전용으로 정리: stub 제공자·mock fixtures·인메모리 세션을
+  제거하고 실제 포털 로그인 + 실제 LLM 호출만 남김(모두 `RUN_LIVE_LLM=1` 필요).
+- `config.py`가 `load_dotenv(override=True)`를 사용해 `.env`를 단일 진실 소스로
+  삼음(셸에 남은 stale 환경변수가 `.env`를 덮어쓰지 않도록).
 - `.env.example` placeholder 표기를 `<your-...>` 스타일로 통일.
 
 ## [0.3.0] - 2026-05-31

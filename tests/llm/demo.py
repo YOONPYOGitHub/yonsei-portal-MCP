@@ -1,22 +1,20 @@
 """Manual demo runner for the LLM <-> MCP harness.
 
-Examples (from the project root, with `.env` filled in):
+This talks to the **real** MCP server over stdio, which logs in to the live
+Yonsei portal and sends the resulting real data to the configured LLM. It is
+therefore gated behind ``RUN_LIVE_LLM=1``.
 
-    # Mocked tools (fixtures) + whatever LLM_PROVIDER points at — no portal login
-    uv run python -m tests.llm.demo "이번 학기 내 시간표 알려줘"
+Examples (from the project root, with `.env` filled in)::
+
+    # Single question
+    RUN_LIVE_LLM=1 uv run python -m tests.llm.demo "이번 학기 내 시간표 알려줘"
 
     # Force a provider for this run
-    uv run python -m tests.llm.demo --provider azure-openai "도서관 빈자리 있어?"
-
-    # No API key needed — scripted stub provider
-    uv run python -m tests.llm.demo --provider stub --tool get_my_loans "책 목록"
+    RUN_LIVE_LLM=1 uv run python -m tests.llm.demo --provider azure-openai "도서관 빈자리 있어?"
 
     # Interactive chat (keep typing questions; blank line or "exit" to quit)
-    uv run python -m tests.llm.demo --chat
-    uv run python -m tests.llm.demo            # (no question also starts chat)
-
-    # FULLY LIVE: real portal login + real LLM (sends real data to the model)
-    uv run python -m tests.llm.demo --live "내 시간표 알려줘"
+    RUN_LIVE_LLM=1 uv run python -m tests.llm.demo --chat
+    RUN_LIVE_LLM=1 uv run python -m tests.llm.demo            # (no question also starts chat)
 """
 from __future__ import annotations
 
@@ -27,24 +25,24 @@ import os
 try:
     from dotenv import load_dotenv
 
-    load_dotenv()
+    load_dotenv(override=True)
 except ImportError:  # pragma: no cover
     pass
 
-from .mcp_host import inmemory_client, run_agent, stdio_client_session
-from .providers import ProviderUnavailable, StubProvider, make_provider
+from .mcp_host import run_agent, stdio_client_session
+from .providers import ProviderUnavailable, make_provider
 
 
 async def _main(args: argparse.Namespace) -> int:
-    if args.provider == "stub":
-        planned = [(args.tool, {})] if args.tool else [("get_my_timetable", {})]
-        provider = StubProvider(planned_calls=planned)
-    else:
-        try:
-            provider = make_provider(args.provider)
-        except ProviderUnavailable as exc:
-            print(f"[demo] provider unavailable: {exc}")
-            return 2
+    if os.getenv("RUN_LIVE_LLM") != "1":
+        print("[demo] refusing live run: set RUN_LIVE_LLM=1 to confirm "
+              "(real portal login + real data sent to the LLM)")
+        return 3
+    try:
+        provider = make_provider(args.provider)
+    except ProviderUnavailable as exc:
+        print(f"[demo] provider unavailable: {exc}")
+        return 2
 
     chat = args.chat or not args.question
     if chat:
@@ -52,18 +50,11 @@ async def _main(args: argparse.Namespace) -> int:
 
     print(f"[demo] provider = {provider.name}")
     print(f"[demo] question = {args.question}")
-    print(f"[demo] mode     = {'LIVE portal' if args.live else 'mocked fixtures'}")
+    print("[demo] mode     = LIVE portal")
     print("-" * 60)
 
-    if args.live:
-        if os.getenv("RUN_LIVE_LLM") != "1":
-            print("[demo] refusing live run: set RUN_LIVE_LLM=1 to confirm")
-            return 3
-        async with stdio_client_session() as session:
-            run = await run_agent(session, provider, args.question, max_turns=8)
-    else:
-        async with inmemory_client(mock_tools=True) as session:
-            run = await run_agent(session, provider, args.question, max_turns=8)
+    async with stdio_client_session() as session:
+        run = await run_agent(session, provider, args.question, max_turns=8)
 
     print("[demo] tools called:", run.called_tool_names or "(none)")
     print("-" * 60)
@@ -71,10 +62,10 @@ async def _main(args: argparse.Namespace) -> int:
     return 0
 
 
-async def _chat_loop(session, provider, *, live: bool) -> None:
+async def _chat_loop(session, provider) -> None:
     """Read questions from stdin and answer them, reusing one MCP session."""
     print(f"[demo] provider = {provider.name}")
-    print(f"[demo] mode     = {'LIVE portal' if live else 'mocked fixtures'}")
+    print("[demo] mode     = LIVE portal")
     print("[demo] type a question and press Enter. Blank line or 'exit' quits.")
     print("-" * 60)
     loop = asyncio.get_event_loop()
@@ -98,15 +89,8 @@ async def _chat_loop(session, provider, *, live: bool) -> None:
 
 
 async def _run_chat(args: argparse.Namespace, provider) -> int:
-    if args.live:
-        if os.getenv("RUN_LIVE_LLM") != "1":
-            print("[demo] refusing live run: set RUN_LIVE_LLM=1 to confirm")
-            return 3
-        async with stdio_client_session() as session:
-            await _chat_loop(session, provider, live=True)
-    else:
-        async with inmemory_client(mock_tools=True) as session:
-            await _chat_loop(session, provider, live=False)
+    async with stdio_client_session() as session:
+        await _chat_loop(session, provider)
     return 0
 
 
@@ -120,23 +104,13 @@ def main() -> None:
     )
     p.add_argument(
         "--provider",
-        default=os.getenv("LLM_PROVIDER", "stub"),
-        help="azure-openai | openai | anthropic | stub (default: LLM_PROVIDER)",
-    )
-    p.add_argument(
-        "--tool",
-        default=None,
-        help="stub provider only: which tool to call",
+        default=os.getenv("LLM_PROVIDER"),
+        help="azure-openai | openai | anthropic (default: LLM_PROVIDER)",
     )
     p.add_argument(
         "--chat",
         action="store_true",
         help="interactive chat loop (keep typing questions)",
-    )
-    p.add_argument(
-        "--live",
-        action="store_true",
-        help="use the REAL portal over stdio (requires RUN_LIVE_LLM=1)",
     )
     raise SystemExit(asyncio.run(_main(p.parse_args())))
 

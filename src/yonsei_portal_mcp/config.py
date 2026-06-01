@@ -11,7 +11,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# ``override=True`` makes the local .env the single source of truth: a stale
+# ``export YONSEI_HEADED=...`` left in the shell won't silently win over the
+# committed-in-spirit .env values.
+load_dotenv(override=True)
 
 PORTAL_URL = "https://portal.yonsei.ac.kr/"
 LEARNUS_URL = "https://ys.learnus.org/"

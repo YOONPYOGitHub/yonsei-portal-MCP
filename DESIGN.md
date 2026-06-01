@@ -237,6 +237,7 @@ spLoginData.php 시점엔 아직 없으므로 **로그아웃 링크가 나타날
 | `get_lms_deadlines` | LearnUs 진행강좌공지 / 달력 | P0 | **과제·마감·강좌공지**(calendar+board 병합) |
 | `get_lms_notices` | LearnUs 공지(전체/강좌/플랫폼) | P0 | 공지 목록(`scope` 필터) |
 | `get_lms_attendance` | LearnUs 출석현황 | P1 | 강좌별 진도/출석 |
+| `get_lms_course_materials` | LearnUs 강좌 페이지 | P1 | 주차별 학습활동/자료 목록(동영상/파일/과제/게시판) |
 | `get_lms_overview` | LearnUs 대시보드 종합 | P0 | 강좌+마감+최근 강좌공지 묶음 |
 | `get_webmail_recent` | 웹메일 | P3(nice) | 최근 메일 제목/발신/요약 |
 | (후순위) 신청·제출·예약·발급 | ⏳ | 보류 | 부작용 있는 write |
@@ -279,6 +280,9 @@ spLoginData.php 시점엔 아직 없으므로 **로그아웃 링크가 나타날
 | `Deadline` | `title`, `due`(ISO/KST), `due_text`(원문), `course_id`, `course`, `url`, `source`("calendar"\|"board") |
 | `Notice` | `type`("course"\|"platform"), `course`(nullable), `date`(YYYY-MM-DD), `title`, `url` |
 | `AttendanceTable` | `course_id`, `header`(str[]), `weeks`(dict[]) |
+| `CourseMaterials` | `course_id`, `section_count`(int), `activity_count`(int), `sections`(`Section[]`) |
+| `Section` | `id`(str), `week`(int\|null), `name`, `activities`(`Activity[]`) |
+| `Activity` | `type`(Moodle 모듈: vod/ubfile/assign/ubboard 등), `title`, `url`(nullable) |
 | `Grade` (P0·ERP) | `term`, `code`, `name`, `credit`, `grade`, `gpa_point` + 요약 `gpa`/`earned_credits` |
 | `TimetableEntry` (P0·ERP) | `day`, `start`, `end`, `room`, `code`, `name`, `professor` |
 | `CourseCatalogItem` (P0·ERP) | `code`, `name`, `professor`, `time`, `room`, `capacity`, `enrolled` |
@@ -292,6 +296,7 @@ spLoginData.php 시점엔 아직 없으므로 **로그아웃 링크가 나타날
 | `get_lms_deadlines` | `course_id?` | `Deadline[]` (calendar+board 병합, `url` 기준 중복제거, `due` 오름차순) |
 | `get_lms_notices` | `scope`="all"\|"course"\|"platform" | `Notice[]` |
 | `get_lms_attendance` | `course_id`(필수) | `AttendanceTable` |
+| `get_lms_course_materials` | `course_id`(필수) | `CourseMaterials` (주차 순 정렬, 강의 개요=week null 먼저) |
 | `get_lms_overview` | – | `{courses, upcoming_deadlines, recent_course_notices}` |
 | `get_my_timetable` (ERP) | `term?` | `TimetableEntry[]` |
 | `get_grades` (ERP) | `term?` | `{summary, items: Grade[]}` |
@@ -482,7 +487,7 @@ flowchart LR
 
 ## 11. Write 포함 확장 조사 & 차기 MVP (라이브 전수조사 2026-05-31)
 
-> **조사 컨셉(중요)**: 고려대 MCP 기능을 그대로 이식하지 않는다. KU는 *참고*만 하고, **연세 포털이 실제로 제공하는 기능을 라이브 로그인으로 검증**해 우리 MVP를 재정의한다. 본 절의 카탈로그는 ERP(underwood1) 좌측 메뉴 트리와 portal.yonsei.ac.kr 대시보드를 **인증 세션으로 직접 열어 라벨을 수집**한 결과다(읽기 전용 프로빙, 폼 제출·상태변경 없음). 프로브: [tests/probe_portal_survey2.py](tests/probe_portal_survey2.py).
+> **조사 컨셉(중요)**: 고려대 MCP 기능을 그대로 이식하지 않는다. KU는 *참고*만 하고, **연세 포털이 실제로 제공하는 기능을 라이브 로그인으로 검증**해 우리 MVP를 재정의한다. 본 절의 카탈로그는 ERP(underwood1) 좌측 메뉴 트리와 portal.yonsei.ac.kr 대시보드를 **인증 세션으로 직접 열어 라벨을 수집**한 결과다(읽기 전용 프로빙, 폼 제출·상태변경 없음). 수집에 사용한 일회성 프로브 스크립트는 조사 완료 후 제거했다.
 
 ### 11.0 핵심 결론 3줄
 

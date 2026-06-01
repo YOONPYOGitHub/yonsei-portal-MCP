@@ -19,6 +19,7 @@ from playwright.async_api import Page
 LEARNUS_HOME = "https://ys.learnus.org/"
 CALENDAR_UPCOMING = "https://ys.learnus.org/calendar/view.php?view=upcoming"
 PROGRESS_URL = "https://ys.learnus.org/report/ubcompletion/progress.php?id={course_id}"
+COURSE_VIEW_URL = "https://ys.learnus.org/course/view.php?id={course_id}"
 
 KST = timezone(timedelta(hours=9))
 
@@ -128,6 +129,60 @@ _ATTENDANCE_JS = r"""
     if (cells.some(c => c)) rows.push(cells);
   });
   return rows;
+}
+"""
+
+_MATERIALS_JS = r"""
+() => {
+  const sections = [];
+  const secs = document.querySelectorAll(
+    '.course-content li.section, .course-content .section.main, li[id^="section-"]'
+  );
+  secs.forEach(sec => {
+    const nameEl = sec.querySelector('.sectionname, h3.sectionname, .section-title');
+    const activities = [];
+    sec.querySelectorAll('li.activity').forEach(li => {
+      const cls = li.className || '';
+      const mod = (cls.match(/modtype_(\w+)/) || [])[1] || null;
+      const link = li.querySelector('a[href]');
+      // .instancename holds the visible name plus a hidden type label
+      // (e.g. "동영상"/"파일") inside .accesshide — strip that for a clean title.
+      const inst = li.querySelector('.instancename');
+      let title = '';
+      let typeLabel = null;
+      if (inst) {
+        const clone = inst.cloneNode(true);
+        const hidden = clone.querySelector('.accesshide');
+        if (hidden) {
+          typeLabel = (hidden.innerText || hidden.textContent || '')
+            .replace(/\s+/g, ' ').trim() || null;
+          hidden.remove();
+        }
+        title = (clone.innerText || clone.textContent || '')
+          .replace(/\s+/g, ' ').trim();
+      }
+      if (!title) {
+        title = link
+          ? (link.innerText || link.textContent || '').replace(/\s+/g, ' ').trim()
+          : '';
+      }
+      if (!title && !link) return;
+      activities.push({
+        mod,
+        type_label: typeLabel,
+        title,
+        url: link ? link.href.split('#')[0] : null,
+      });
+    });
+    sections.push({
+      id: sec.id || null,
+      name: nameEl
+        ? (nameEl.innerText || nameEl.textContent || '').replace(/\s+/g, ' ').trim()
+        : null,
+      activities,
+    });
+  });
+  return sections;
 }
 """
 
@@ -377,3 +432,75 @@ async def fetch_attendance(page: Page, course_id: str) -> dict:
             entry[key] = value
         weeks.append(entry)
     return {"course_id": course_id, "header": header, "weeks": weeks}
+
+
+_SECTION_NUM_RE = re.compile(r"section-(\d+)")
+_WEEK_NUM_RE = re.compile(r"(\d+)\s*주차")
+
+
+def _section_week(section: dict) -> Optional[int]:
+    """Best-effort week number for a course section (None for the overview)."""
+    name = section.get("name") or ""
+    m = _WEEK_NUM_RE.search(name)
+    if m:
+        return int(m.group(1))
+    sid = section.get("id") or ""
+    m = _SECTION_NUM_RE.search(sid)
+    if m:
+        n = int(m.group(1))
+        return n if n > 0 else None
+    return None
+
+
+async def fetch_course_materials(page: Page, course_id: str) -> dict:
+    """Return the weekly sections and learning materials/activities of a course.
+
+    Navigates to the LearnUs course page and reads each section (강의 개요 +
+    weekly blocks) together with its activities (동영상/파일/과제/게시판 등). The
+    MCP layer hands this structure to the LLM so it can ground answers (e.g. a
+    study checklist) in the *actual* course content rather than guessing.
+
+    ``course_id`` is the id from :func:`fetch_courses`. The returned dict has
+    ``course_id``, ``section_count``, ``activity_count`` and ``sections`` (each
+    with ``id``, ``week``, ``name`` and a list of ``activities``; every activity
+    carries ``type`` (the Moodle module type, e.g. ``vod``/``ubfile``/``assign``),
+    ``title`` and ``url``). Sections are ordered by week, with the overview
+    (week ``None``) first.
+    """
+    await page.goto(
+        COURSE_VIEW_URL.format(course_id=course_id), wait_until="domcontentloaded"
+    )
+    await page.wait_for_timeout(1200)
+    raw_sections = await page.evaluate(_MATERIALS_JS)
+
+    sections: list[dict] = []
+    activity_total = 0
+    for sec in raw_sections or []:
+        activities = [
+            {
+                "type": a.get("mod"),
+                "title": a.get("title"),
+                "url": a.get("url"),
+            }
+            for a in sec.get("activities", [])
+            if a.get("title") or a.get("url")
+        ]
+        if not activities and not (sec.get("name") or "").strip():
+            continue
+        activity_total += len(activities)
+        sections.append(
+            {
+                "id": sec.get("id"),
+                "week": _section_week(sec),
+                "name": sec.get("name"),
+                "activities": activities,
+            }
+        )
+
+    sections.sort(key=lambda s: (s.get("week") is not None, s.get("week") or 0))
+    return {
+        "course_id": course_id,
+        "section_count": len(sections),
+        "activity_count": activity_total,
+        "sections": sections,
+    }
