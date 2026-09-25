@@ -10,7 +10,7 @@ Selection order for :func:`make_provider`:
 1. the explicit ``name`` argument, else
 2. the ``LLM_PROVIDER`` environment variable.
 
-Supported names: ``azure-openai``, ``openai``, ``anthropic``.
+Supported names: ``azure-openai``, ``openai``, ``anthropic``, ``gemini``.
 """
 from __future__ import annotations
 
@@ -31,15 +31,16 @@ class ProviderUnavailable(RuntimeError):
 class ToolCall:
     id: str
     name: str
-    arguments: dict[str, Any]
+    arguments: dict[str, Any] = field(repr=False)
 
 
 @dataclass
 class AssistantTurn:
     """One model turn: free-text answer and/or a batch of tool calls."""
 
-    text: str | None = None
-    tool_calls: list[ToolCall] = field(default_factory=list)
+    text: str | None = field(default=None, repr=False)
+    tool_calls: list[ToolCall] = field(default_factory=list, repr=False)
+    assistant_message: dict[str, Any] | None = field(default=None, repr=False)
 
 
 @runtime_checkable
@@ -57,22 +58,43 @@ class Provider(Protocol):
 # ---------------------------------------------------------------------------
 
 
+def _tool_arguments(raw: Any) -> dict[str, Any]:
+    try:
+        arguments = json.loads(raw)
+    except (ValueError, TypeError):
+        raise ValueError("Tool arguments must be a JSON object") from None
+    if not isinstance(arguments, dict):
+        raise ValueError("Tool arguments must be a JSON object")
+    return arguments
+
+
+def _openai_turn_from_choice(choice: Any) -> AssistantTurn:
+    if getattr(choice, "finish_reason", None) not in {"stop", "tool_calls"}:
+        raise RuntimeError("Incomplete or unsupported chat completion")
+    return _openai_turn_from_message(choice.message)
+
+
 def _openai_turn_from_message(message: Any) -> AssistantTurn:
     calls: list[ToolCall] = []
     for tc in getattr(message, "tool_calls", None) or []:
-        try:
-            args = json.loads(tc.function.arguments or "{}")
-        except (json.JSONDecodeError, TypeError):
-            args = {}
+        args = _tool_arguments(tc.function.arguments)
         calls.append(ToolCall(id=tc.id, name=tc.function.name, arguments=args))
-    return AssistantTurn(text=getattr(message, "content", None), tool_calls=calls)
+    raw = message.model_dump(exclude_none=True) if hasattr(message, "model_dump") else None
+    assistant_message = (
+        {key: value for key, value in raw.items() if key in {"role", "content", "tool_calls"}}
+        if raw is not None else None
+    )
+    return AssistantTurn(
+        text=getattr(message, "content", None), tool_calls=calls,
+        assistant_message=assistant_message,
+    )
 
 
 class AzureOpenAIProvider:
     """Azure OpenAI (works through an APIM gateway).
 
-    ``api_key`` is sent as the ``api-key`` header. If your APIM product also
-    requires ``Ocp-Apim-Subscription-Key``, pass ``apim_subscription_key``.
+    ``v1`` selects stateless Responses; dated versions select Chat Completions.
+    APIM subscriptions use the additional ``Ocp-Apim-Subscription-Key`` header.
     """
 
     name = "azure-openai"
@@ -86,7 +108,7 @@ class AzureOpenAIProvider:
         apim_subscription_key: str | None = None,
     ) -> None:
         try:
-            from openai import AsyncAzureOpenAI
+            from openai import AsyncAzureOpenAI, AsyncOpenAI
         except ImportError as exc:  # pragma: no cover
             raise ProviderUnavailable(
                 "openai package not installed; run `uv sync --extra llm`"
@@ -97,17 +119,27 @@ class AzureOpenAIProvider:
             if apim_subscription_key
             else None
         )
-        self._client = AsyncAzureOpenAI(
-            azure_endpoint=endpoint,
-            api_version=api_version,
-            api_key=api_key,
-            default_headers=default_headers,
-        )
+        self._use_responses = api_version == "v1"
+        if self._use_responses:
+            self._client = AsyncOpenAI(
+                base_url=endpoint.rstrip("/") + "/openai/v1/",
+                api_key=api_key,
+                default_headers=default_headers,
+            )
+        else:
+            self._client = AsyncAzureOpenAI(
+                azure_endpoint=endpoint,
+                api_version=api_version,
+                api_key=api_key,
+                default_headers=default_headers,
+            )
         self._deployment = deployment
 
     async def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> AssistantTurn:
+        if self._use_responses:
+            return await self._complete_responses(messages, tools)
         # NOTE: gpt-5.x mini deployments reject `temperature`/`max_tokens`; omit
         # them and let the service use defaults.
         resp = await self._client.chat.completions.create(
@@ -116,14 +148,67 @@ class AzureOpenAIProvider:
             tools=tools or None,
             tool_choice="auto" if tools else None,
         )
-        return _openai_turn_from_message(resp.choices[0].message)
+        return _openai_turn_from_choice(resp.choices[0])
+
+    async def _complete_responses(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> AssistantTurn:
+        inputs: list[dict[str, Any]] = []
+        for message in messages:
+            if "_responses_output" in message:
+                inputs.extend(message["_responses_output"])
+            elif message["role"] == "tool":
+                inputs.append({
+                    "type": "function_call_output",
+                    "call_id": message["tool_call_id"],
+                    "output": message["content"],
+                })
+            else:
+                if message.get("content") is not None:
+                    inputs.append({"role": message["role"], "content": message["content"]})
+                for call in message.get("tool_calls") or []:
+                    inputs.append({
+                        "type": "function_call", "call_id": call["id"],
+                        "name": call["function"]["name"],
+                        "arguments": call["function"]["arguments"],
+                    })
+
+        response = await self._client.responses.create(
+            model=self._deployment,
+            input=inputs,
+            tools=[{"type": "function", "strict": False, **tool["function"]} for tool in tools],
+            store=False,
+            include=["reasoning.encrypted_content"],
+        )
+        if response.status != "completed":
+            raise RuntimeError(f"Azure response status: {response.status}")
+        calls = []
+        for item in response.output:
+            if item.type == "function_call":
+                arguments = _tool_arguments(item.arguments)
+                calls.append(ToolCall(item.call_id, item.name, arguments))
+        return AssistantTurn(
+            text=response.output_text or None,
+            tool_calls=calls,
+            assistant_message={
+                "role": "assistant",
+                "content": response.output_text or None,
+                "_responses_output": [item.model_dump(exclude_none=True) for item in response.output],
+            },
+        )
 
 
-class OpenAIProvider:
-    name = "openai"
+class OpenAICompatibleProvider:
+    """OpenAI Chat Completions compatible provider."""
 
     def __init__(
-        self, api_key: str, model: str, base_url: str | None = None
+        self,
+        *,
+        name: str,
+        api_key: str,
+        model: str,
+        base_url: str | None = None,
+        tool_request_options: dict[str, Any] | None = None,
     ) -> None:
         try:
             from openai import AsyncOpenAI
@@ -131,19 +216,38 @@ class OpenAIProvider:
             raise ProviderUnavailable(
                 "openai package not installed; run `uv sync --extra llm`"
             ) from exc
+        self.name = name
         self._client = AsyncOpenAI(api_key=api_key, base_url=base_url or None)
         self._model = model
+        self._tool_request_options = tool_request_options or {}
 
     async def complete(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> AssistantTurn:
-        resp = await self._client.chat.completions.create(
-            model=self._model,
-            messages=messages,
-            tools=tools or None,
-            tool_choice="auto" if tools else None,
+        request: dict[str, Any] = {
+            "model": self._model,
+            "messages": messages,
+            "tools": tools or None,
+            "tool_choice": "auto" if tools else None,
+        }
+        if tools:
+            request.update(self._tool_request_options)
+        resp = await self._client.chat.completions.create(**request)
+        return _openai_turn_from_choice(resp.choices[0])
+
+
+class OpenAIProvider(OpenAICompatibleProvider):
+    name = "openai"
+
+    def __init__(
+        self, api_key: str, model: str, base_url: str | None = None
+    ) -> None:
+        super().__init__(
+            name=self.name,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
         )
-        return _openai_turn_from_message(resp.choices[0].message)
 
 
 # ---------------------------------------------------------------------------
@@ -169,10 +273,7 @@ def _to_anthropic(messages: list[dict[str, Any]]) -> tuple[str | None, list[dict
                 blocks.append({"type": "text", "text": m["content"]})
             for tc in m.get("tool_calls") or []:
                 fn = tc["function"]
-                try:
-                    args = json.loads(fn.get("arguments") or "{}")
-                except (json.JSONDecodeError, TypeError):
-                    args = {}
+                args = _tool_arguments(fn.get("arguments"))
                 blocks.append(
                     {"type": "tool_use", "id": tc["id"], "name": fn["name"], "input": args}
                 )
@@ -229,6 +330,8 @@ class AnthropicProvider:
         if anth_tools:
             kwargs["tools"] = anth_tools
         resp = await self._client.messages.create(**kwargs)
+        if getattr(resp, "stop_reason", None) not in {"end_turn", "stop_sequence", "tool_use"}:
+            raise RuntimeError("Incomplete or unsupported Anthropic completion")
 
         text_parts: list[str] = []
         calls: list[ToolCall] = []
@@ -261,7 +364,7 @@ def make_provider(name: str | None = None) -> Provider:
     if not selected:
         raise ProviderUnavailable(
             "no LLM provider configured: set LLM_PROVIDER "
-            "(azure-openai | openai | anthropic)"
+            "(azure-openai | openai | anthropic | gemini)"
         )
 
     if selected == "azure-openai":
@@ -301,13 +404,25 @@ def make_provider(name: str | None = None) -> Provider:
             base_url=os.getenv("OPENAI_BASE_URL"),
         )
 
+    if selected == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ProviderUnavailable("gemini missing config: GEMINI_API_KEY")
+        return OpenAICompatibleProvider(
+            name="gemini",
+            api_key=api_key,
+            model=os.getenv("GEMINI_MODEL") or "gemini-3.8-flash",
+            base_url=os.getenv("GEMINI_BASE_URL")
+            or "https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+
     if selected == "anthropic":
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise ProviderUnavailable("anthropic missing config: ANTHROPIC_API_KEY")
         return AnthropicProvider(
             api_key=api_key,
-            model=os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
+            model=os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-5",
         )
 
     raise ProviderUnavailable(f"unknown LLM_PROVIDER: {selected!r}")

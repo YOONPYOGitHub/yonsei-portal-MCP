@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
@@ -30,13 +31,27 @@ DEFAULT_SYSTEM_PROMPT = (
 
 @dataclass
 class AgentRun:
-    final_text: str
-    tool_calls: list[ToolCall] = field(default_factory=list)
-    messages: list[dict[str, Any]] = field(default_factory=list)
+    final_text: str = field(repr=False)
+    tool_calls: list[ToolCall] = field(default_factory=list, repr=False)
+    messages: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    tool_errors: list[str] = field(default_factory=list)
+    exhausted: bool = False
 
     @property
     def called_tool_names(self) -> list[str]:
         return [tc.name for tc in self.tool_calls]
+
+
+def agent_run_error(run: AgentRun, expected_tools: set[str] | None = None) -> str | None:
+    if run.tool_errors:
+        return "MCP tool returned an error (payload suppressed)"
+    if run.exhausted:
+        return "Agent turn limit reached"
+    if not run.final_text.strip():
+        return "Empty final answer"
+    if expected_tools is not None and not expected_tools.intersection(run.called_tool_names):
+        return "Expected tool was not called"
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +115,7 @@ async def run_agent(
     messages.append({"role": "user", "content": user_message})
 
     made: list[ToolCall] = []
+    tool_errors: list[str] = []
     turn: AssistantTurn = AssistantTurn(text="")
 
     for _ in range(max_turns):
@@ -107,11 +123,12 @@ async def run_agent(
 
         if not turn.tool_calls:
             return AgentRun(
-                final_text=turn.text or "", tool_calls=made, messages=messages
+                final_text=turn.text or "", tool_calls=made, messages=messages,
+                tool_errors=tool_errors,
             )
 
         messages.append(
-            {
+            turn.assistant_message or {
                 "role": "assistant",
                 "content": turn.text or None,
                 "tool_calls": [
@@ -132,15 +149,19 @@ async def run_agent(
             made.append(tc)
             try:
                 result = await session.call_tool(tc.name, tc.arguments)
+                if getattr(result, "isError", False):
+                    tool_errors.append(tc.name)
                 content = call_result_to_text(result)
             except Exception as exc:  # surface tool errors back to the model
-                content = f"ERROR calling {tc.name}: {exc}"
+                tool_errors.append(tc.name)
+                content = f"ERROR calling {tc.name}: {type(exc).__name__}"
             messages.append(
                 {"role": "tool", "tool_call_id": tc.id, "content": content}
             )
 
     return AgentRun(
-        final_text=turn.text or "", tool_calls=made, messages=messages
+        final_text="", tool_calls=made, messages=messages,
+        tool_errors=tool_errors, exhausted=True,
     )
 
 
@@ -157,11 +178,12 @@ async def stdio_client_session(
     from mcp.client.stdio import stdio_client
 
     params = StdioServerParameters(
-        command=python or os.getenv("PYTHON", "python"),
+        command=python or os.getenv("PYTHON") or sys.executable,
         args=["-m", "yonsei_portal_mcp"],
         env=os.environ.copy(),
     )
-    async with stdio_client(params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            yield session
+    with open(os.devnull, "w") as errlog:
+        async with stdio_client(params, errlog=errlog) as (read, write):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                yield session

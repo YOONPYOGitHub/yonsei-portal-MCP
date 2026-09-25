@@ -25,7 +25,7 @@ import os
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(override=True)
+    load_dotenv(override=False)
 except ImportError:  # pragma: no cover
     pass
 
@@ -40,8 +40,8 @@ async def _main(args: argparse.Namespace) -> int:
         return 3
     try:
         provider = make_provider(args.provider)
-    except ProviderUnavailable as exc:
-        print(f"[demo] provider unavailable: {exc}")
+    except ProviderUnavailable:
+        print("[demo] provider unavailable (details suppressed)")
         return 2
 
     chat = args.chat or not args.question
@@ -105,7 +105,10 @@ def main() -> None:
     p.add_argument(
         "--provider",
         default=os.getenv("LLM_PROVIDER"),
-        help="azure-openai | openai | anthropic (default: LLM_PROVIDER)",
+        help=(
+            "azure-openai | openai | anthropic | gemini "
+            "(default: LLM_PROVIDER)"
+        ),
     )
     p.add_argument(
         "--chat",

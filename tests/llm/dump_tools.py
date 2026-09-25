@@ -22,7 +22,7 @@ import sys
 try:
     from dotenv import load_dotenv
 
-    load_dotenv(override=True)
+    load_dotenv(override=False)
 except ImportError:  # pragma: no cover
     pass
 
@@ -61,7 +61,7 @@ async def _main(calls: list[tuple[str, dict]]) -> int:
                 result = await session.call_tool(name, args)
                 print(_pretty(call_result_to_text(result)), flush=True)
             except Exception as exc:  # surface tool failures
-                print(f"ERROR: {type(exc).__name__}: {exc}", flush=True)
+                print(f"ERROR: {type(exc).__name__} (details suppressed)", flush=True)
     print("=" * 72, flush=True)
     return 0
 

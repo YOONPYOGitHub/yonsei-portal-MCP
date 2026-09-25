@@ -20,9 +20,11 @@ The password is never logged or returned to callers.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional, TypeVar
 
+import anyio
 from playwright.async_api import (
     Browser,
     BrowserContext,
@@ -58,6 +60,11 @@ _INTERACTIVE_LOGIN_TIMEOUT_MS = 180_000
 T = TypeVar("T")
 
 
+def _account_storage(settings: Settings, system: str, filename: str):
+    account = hashlib.sha256(settings.yonsei_id.encode("utf-8")).hexdigest()
+    return settings.storage_state_path.parent / account / system / filename
+
+
 class BrowserSession:
     """Shared Playwright lifecycle for one authenticated Yonsei web property.
 
@@ -80,25 +87,46 @@ class BrowserSession:
     async def start(self) -> None:
         if self._context is not None:
             return
-        self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(
-            headless=not self.settings.headed
-        )
-        context_kwargs: dict = {}
-        if self._storage_state_path.exists():
-            context_kwargs["storage_state"] = str(self._storage_state_path)
-        self._context = await self._browser.new_context(**context_kwargs)
+        try:
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.launch(
+                headless=not self.settings.headed
+            )
+            context_kwargs: dict = {}
+            if self._storage_state_path.exists():
+                context_kwargs["storage_state"] = str(self._storage_state_path)
+            self._context = await self._browser.new_context(**context_kwargs)
+        except BaseException:
+            await self._close_unlocked()
+            raise
 
     async def close(self) -> None:
-        if self._context is not None:
-            await self._context.close()
-            self._context = None
-        if self._browser is not None:
-            await self._browser.close()
-            self._browser = None
-        if self._playwright is not None:
-            await self._playwright.stop()
-            self._playwright = None
+        async with self._lock:
+            await self._close_unlocked()
+
+    async def _close_unlocked(self) -> None:
+        context, browser, driver = self._context, self._browser, self._playwright
+
+        async def release() -> None:
+            for resource, method in ((context, "close"), (browser, "close"), (driver, "stop")):
+                if resource is not None:
+                    try:
+                        await getattr(resource, method)()
+                    except Exception:
+                        pass
+            self._context = self._browser = self._playwright = None
+
+        cancelled = None
+        with anyio.CancelScope(shield=True):
+            cleanup = asyncio.create_task(release())
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError as exc:
+                    cancelled = exc
+            cleanup.result()
+        if cancelled is not None:
+            raise cancelled
 
     async def _save_storage_state(self) -> None:
         if self._context is None:
@@ -124,26 +152,29 @@ class BrowserSession:
                 self._storage_state_path.unlink()
         except Exception:
             pass
-        if self._context is not None:
-            try:
-                await self._context.close()
-            except Exception:
-                pass
-            self._context = None
+        await self._close_unlocked()
 
     # -- page access ---------------------------------------------------------
     @asynccontextmanager
     async def page(self) -> AsyncIterator[Page]:
         """Yield an authenticated page, serialising access with a lock."""
         async with self._lock:
-            await self.start()
-            assert self._context is not None
-            page = await self._context.new_page()
-            try:
-                await self.ensure_authenticated(page)
+            async with self._page_unlocked() as page:
                 yield page
-            finally:
+
+    @asynccontextmanager
+    async def _page_unlocked(self) -> AsyncIterator[Page]:
+        await self.start()
+        assert self._context is not None
+        page = await self._context.new_page()
+        try:
+            await self.ensure_authenticated(page)
+            yield page
+        finally:
+            try:
                 await page.close()
+            except Exception:
+                pass
 
     async def run(self, action: Callable[[Page], Awaitable[T]]) -> T:
         """Run ``action`` on an authenticated page, re-logging in once on failure.
@@ -152,29 +183,30 @@ class BrowserSession:
         attempt fails for a non-auth reason (timeout / stale cookies) we drop the
         cached session and retry exactly once with a fresh login.
         """
-        for attempt in range(2):
-            try:
-                async with self.page() as page:
-                    return await action(page)
-            except (AuthRequiredError, AuthFailedError, MFARequiredError):
-                raise
-            except PortalError:
-                if attempt == 0:
-                    await self._invalidate_session()
-                    continue
-                raise
-            except PlaywrightTimeoutError as exc:
-                if attempt == 0:
-                    await self._invalidate_session()
-                    continue
-                raise SessionExpiredError(
-                    "세션이 만료되었거나 응답이 지연되어 재시도에도 실패했습니다."
-                ) from exc
-            except Exception as exc:
-                if attempt == 0:
-                    await self._invalidate_session()
-                    continue
-                raise ScrapeFailedError(str(exc)) from exc
+        async with self._lock:
+            for attempt in range(2):
+                try:
+                    async with self._page_unlocked() as page:
+                        return await action(page)
+                except (AuthRequiredError, AuthFailedError, MFARequiredError):
+                    raise
+                except PortalError:
+                    if attempt == 0:
+                        await self._invalidate_session()
+                        continue
+                    raise
+                except PlaywrightTimeoutError:
+                    if attempt == 0:
+                        await self._invalidate_session()
+                        continue
+                    raise SessionExpiredError(
+                        "세션이 만료되었거나 응답이 지연되어 재시도에도 실패했습니다."
+                    ) from None
+                except Exception:
+                    if attempt == 0:
+                        await self._invalidate_session()
+                        continue
+                    raise ScrapeFailedError("조회 중 오류가 발생했습니다. 세션 또는 사이트 응답을 확인하세요.") from None
         raise ScrapeFailedError("알 수 없는 이유로 요청을 완료하지 못했습니다.")
 
 
@@ -183,7 +215,7 @@ class LearnUsSession(BrowserSession):
 
     def __init__(self, settings: Optional[Settings] = None) -> None:
         s = settings or load_settings()
-        super().__init__(s, s.storage_state_path)
+        super().__init__(s, _account_storage(s, "learnus", s.storage_state_path.name))
 
     # -- authentication ------------------------------------------------------
     async def _is_authenticated(self, page: Page) -> bool:
@@ -291,7 +323,7 @@ class LibrarySession(BrowserSession):
 
     def __init__(self, settings: Optional[Settings] = None) -> None:
         s = settings or load_settings()
-        storage = s.storage_state_path.parent / "library.json"
+        storage = _account_storage(s, "library", "library.json")
         super().__init__(s, storage)
 
     async def _is_authenticated(self, page: Page) -> bool:
@@ -374,7 +406,7 @@ class ErpSession(BrowserSession):
 
     def __init__(self, settings: Optional[Settings] = None) -> None:
         s = settings or load_settings()
-        storage = s.storage_state_path.parent / "erp.json"
+        storage = _account_storage(s, "erp", "erp.json")
         super().__init__(s, storage)
 
     async def _is_authenticated(self, page: Page) -> bool:
@@ -465,22 +497,42 @@ _library_session: Optional[LibrarySession] = None
 _erp_session: Optional[ErpSession] = None
 
 
+def validate_session_settings(settings: Settings) -> None:
+    for session in (_session, _library_session, _erp_session):
+        if session is not None and session.settings != settings:
+            raise AuthRequiredError("로그인 설정이 변경되었습니다. MCP 서버를 재시작하세요.")
+
+
 def get_session() -> LearnUsSession:
     global _session
+    settings = load_settings()
+    validate_session_settings(settings)
     if _session is None:
-        _session = LearnUsSession()
+        _session = LearnUsSession(settings)
     return _session
 
 
 def get_library_session() -> LibrarySession:
     global _library_session
+    settings = load_settings()
+    validate_session_settings(settings)
     if _library_session is None:
-        _library_session = LibrarySession()
+        _library_session = LibrarySession(settings)
     return _library_session
 
 
 def get_erp_session() -> ErpSession:
     global _erp_session
+    settings = load_settings()
+    validate_session_settings(settings)
     if _erp_session is None:
-        _erp_session = ErpSession()
+        _erp_session = ErpSession(settings)
     return _erp_session
+
+
+async def close_sessions() -> None:
+    """Release only sessions already created by this MCP process."""
+    global _session, _library_session, _erp_session
+    opened = (_session, _library_session, _erp_session)
+    _session = _library_session = _erp_session = None
+    await asyncio.gather(*(session.close() for session in opened if session is not None))

@@ -19,18 +19,20 @@ classifiers = [
     "Natural Language :: Korean",
 ]
 dependencies = [
+    "anyio>=4.5",
     "mcp>=1.2.0",
     "playwright>=1.44.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",
     "certifi>=2024.2.2",
+    "beautifulsoup4>=4.12",
 ]
 
 [project.optional-dependencies]
 # Real-LLM integration test harness (tests/llm). `anthropic` is lazy-imported,
 # so it is only needed when LLM_PROVIDER=anthropic.
 llm = [
-    "openai>=1.50",
+    "openai>=1.82",
     "anthropic>=0.40",
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
@@ -52,9 +54,8 @@ packages = ["src/yonsei_portal_mcp"]
 artifacts = ["src/yonsei_portal_mcp/_certs/*.pem"]
 
 [tool.pytest.ini_options]
-# Only collect the LLM harness so the manual smoke scripts in tests/ (which log
-# in to the real portal on import) are never auto-imported by pytest.
-testpaths = ["tests/llm"]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
 asyncio_mode = "auto"
 markers = [
     "llm: requires a real LLM provider (skipped when no API key is configured)",

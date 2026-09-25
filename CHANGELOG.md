@@ -6,6 +6,37 @@
 
 ## [Unreleased]
 
+아래 변경은 현재 소스에 포함되지만 아직 별도 패키지 릴리스가 아닙니다.
+현재 계약·검증 근거·미완료 범위는 [DESIGN.md](DESIGN.md)를 따릅니다.
+
+### Changed
+- **로그인 저장 변경:** 계정·시스템별 쿠키 경로 사용. 기존 공용 쿠키는 자동 이관하지 않아 최초 재인증 필요. 실행 중 설정 변경은 서버 재시작 요구.
+- **설정 우선순위 변경:** 명시적 환경변수가 설정 파일보다 우선. 실접속 비활성화를 설정 파일이 덮어쓰지 않음.
+- **프로필 기본값 변경:** 이름·학번 제외. `include_pii=True`로만 포함.
+- **실험 옵션 철회:** 미검증 도서관 날짜·페이지와 과거강좌 page 입력을 공개 스키마에서 제거. 오래된 입력은 무시하지 않고 거절. 내부 합성 테스트는 지원 완료 근거가 아님.
+- `get_grades` 연도·학기 필터와 누적 요약 범위 구분. `get_exam_schedule` 중간/기말 선택 제공.
+- `get_notice`에 공개 도서관 본문 조회 추가. 이미지 내용은 제외하며 출처·이미지 수 안내.
+- 공개 도구 수 15개에서 33개로 확장. 오프라인 계약 테스트와 선택적 라이브 테스트를 분리.
+- 현재 설계와 과거 조사 전문을 분리하고 프리셋의 마감 종류·주말·좌석·실패 해석을 현행 계약에 맞춤.
+
+### Added
+- LearnUs: `get_lms_assignments`, `get_lms_assignment_status`, `get_lms_course_history`, `get_lms_gradebook`, `get_lms_boards`, `get_lms_board_posts`. 제출물/게시판 본문 제외, 성적 피드백 opt-in.
+- ERP: `search_courses`, `get_exam_schedule`, `get_scholarship_history`. 수강편람 연도·학기·캠퍼스 필터 및 200건 상한/잘림 표시.
+- 도서관: `get_my_reservations`, `get_my_loan_history`, `get_my_reservation_history`, `search_library_books`, `get_library_book_detail`, `get_library_notices`. 이력은 기본 표시 결과만 공개 지원.
+- 일정: `get_my_schedule`, `get_academic_calendar`, `export_timetable_ics`. 반복 시간표는 사용자 확인 기간·교시 시각·제외일을 사용하며 자동 학기/교시 발견이 아님.
+- LearnUs 한국어 URL/DOM 검증, 원문 연도·학기 조건 확인, 게시판·성적·과제·좌석·이력의 원문 대조와 오류 회귀 테스트.
+- Gemini 하니스 및 Azure v1 Responses 어댑터. Azure 응답 저장 비활성화와 추론·도구 메시지 재전송 지원.
+
+### Fixed
+- LearnUs 오류/로딩 화면을 빈 결과로 반환하던 문제. 실측 빈 달력·출석 리다이렉트 지원, 지연 자료·중첩 제출물/피드백 표·숫자 날짜 처리 보강.
+- ERP 성적 데이터셋 역매핑 및 시간표 소수 학점·미지원 교시 표현 처리. 누락/손상 데이터를 정상 0건으로 숨기지 않음.
+- 열람실 합계 행 중복 집계 수정과 원문/배정 가능 잔여석 분리. `좌석배정`/`FULL` 등 운영 상태 및 원문 합계 대조.
+- 브라우저 시작 실패·재인증·종료 시 자원 정리와 재시도 전체 잠금 유지.
+- 마감 ICS의 동일 시작/종료 제거, 날짜만 있는 값의 자정 추정 방지, UTC 타임스탬프·URI 인코딩 수정.
+- LLM 인자 JSON·완료 상태 검사, 필터 누락·빈 결과의 거짓 통과 방지, 민감 입력/대화의 실패 진단 노출 억제와 CLI 실패 종료 코드 반영.
+
+이전 버전 항목은 당시 릴리스 기록입니다. 아래 `override=True`나 기존 쿠키 경로 설명을 현재 설정으로 사용하지 마세요.
+
 ## [0.4.0] - 2026-06-01
 
 ### Added

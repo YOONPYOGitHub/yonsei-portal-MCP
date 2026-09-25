@@ -43,3 +43,27 @@ async def get_json(url: str, *, params: dict | None = None, timeout: float = 15.
         resp = await client.get(url, params=params)
         resp.raise_for_status()
         return resp.json()
+
+
+async def get_html(url: str, *, params: dict | None = None, timeout: float = 20.0) -> str:
+    """GET public HTML, allowing only same-origin HTTPS redirects."""
+    origin = httpx.URL(url)
+    if origin.scheme != "https" or origin.userinfo:
+        raise httpx.HTTPError("Public HTML requests require HTTPS without credentials")
+    async with httpx.AsyncClient(
+        verify=_ssl_context(), timeout=timeout, headers={"User-Agent": _USER_AGENT},
+    ) as client:
+        target = origin
+        for attempt in range(5):
+            response = await client.get(target, params=params)
+            params = None
+            if not response.is_redirect:
+                response.raise_for_status()
+                return response.text
+            target = response.url.join(response.headers.get("location", ""))
+            if (
+                (target.scheme, target.host, target.port) != (origin.scheme, origin.host, origin.port)
+                or target.userinfo
+            ):
+                raise httpx.HTTPError("Cross-origin public HTML redirect blocked")
+        raise httpx.TooManyRedirects("Public HTML redirect limit exceeded")
