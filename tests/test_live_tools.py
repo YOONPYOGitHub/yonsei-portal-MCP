@@ -248,7 +248,7 @@ async def test_gradebook_copies_and_history_match_source() -> None:
         expected = []
         for table in await original_tables("table.searchTable"):
             expected.extend({field: row[table["headers"].index(header)] for header, field in fields.items()} for row in table["rows"])
-        matches = expected == details["copies"]
+        matches = expected == [{field: copy[field] for field in fields.values()} for copy in details["copies"]]
         if not matches:
             pytest.fail("Book copies differ from browser fields (payload suppressed)", pytrace=False)
         for fetch, key, fields in (
@@ -270,6 +270,72 @@ async def test_gradebook_copies_and_history_match_source() -> None:
             pytest.fail(f"Additional reads source comparison: {type(exc).__name__}", pytrace=False)
         finally:
             await session.close()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("campus", "label", "search_field", "field_label", "query", "limit"), [
+    ("all", "전체", "all", "전체", "위키드", 3),
+    ("sinchon_international", "신촌 + 국제", "all", "전체", "위키드", 10),
+    ("sinchon", "신촌", "title", "서명", "위키드", 10),
+    ("international", "국제", "all", "전체", "위키드", 10),
+    ("mirae", "미래", "all", "전체", "위키드", 10),
+    ("sinchon", "신촌", "author", "저자", "Maguire, Gregory", 10),
+])
+async def test_catalog_mcp_matches_browser_form(campus, label, search_field, field_label, query, limit):
+    if os.getenv("RUN_LIVE_PORTAL") != "1":
+        pytest.skip("set RUN_LIVE_PORTAL=1 for catalog browser/MCP comparison")
+    from yonsei_portal_mcp.session import get_library_session
+
+    browser_session = get_library_session()
+    try:
+        async with browser_session.page() as page:
+            await page.goto("https://library.yonsei.ac.kr/search/tot/result?st=KWRD&si=TOTAL&q=Wicked", wait_until="domcontentloaded")
+            form = page.locator('select[name="lmtUseData"]').locator("xpath=ancestor::form")
+            await form.locator('select[name="lmtUseData"]').select_option(label=label)
+            await form.locator('select#si1').select_option(label=field_label, force=True)
+            await form.locator('input[type="text"][name="q"]').fill(query)
+            async with page.expect_navigation(wait_until="domcontentloaded"):
+                await form.locator('input[type="submit"]').click()
+            total = int((await page.locator(".searchCnt strong").last.inner_text()).replace(",", ""))
+            expected_ids = []
+            for number in range(1, max(1, (total + 9) // 10) + 1):
+                displayed_total = int((await page.locator(".searchCnt strong").last.inner_text()).replace(",", ""))
+                assert displayed_total == total, "Catalog changed during browser verification"
+                assert await page.locator('select[name="cpp"]').input_value() == "10"
+                expected_ids.extend(await page.locator("li.items dd.title a").evaluate_all("links => links.map(link => new URL(link.href).pathname.split('/').pop())"))
+                if number * 10 < total:
+                    links = await page.locator(".paging a[href]").evaluate_all("links => links.map(link => link.href)")
+                    next_url = next(url for url in links if parse_qs(urlsplit(url).query).get("pn") == [str(number + 1)])
+                    await page.goto(next_url, wait_until="domcontentloaded")
+            assert len(expected_ids) == len(set(expected_ids)) == total
+            actual_ids, source_total = [], None
+            params = StdioServerParameters(command=sys.executable, args=["-m", "yonsei_portal_mcp"], env=os.environ.copy())
+            with open(os.devnull, "w") as errlog:
+                async with stdio_client(params, errlog=errlog) as streams:
+                    async with ClientSession(*streams) as session:
+                        await session.initialize()
+                        arguments = {"query": query, "campus": campus, "search_field": search_field, "limit": limit}
+                        while arguments is not None:
+                            response = await session.call_tool("search_library_books", arguments)
+                            assert not response.isError, "Catalog MCP returned an error"
+                            result = response.structuredContent or json.loads("".join(getattr(part, "text", "") for part in response.content))
+                            result = result.get("result", result)
+                            source_total = result["total"] if source_total is None else source_total
+                            assert result["total"] == source_total == total
+                            assert result["filters_verified"] and result["filters"] == {"campus": campus, "search_field": search_field}
+                            assert not result["page_limit_reached"]
+                            assert not result["source_limited"]
+                            actual_ids.extend(item["catalog_id"] for item in result["results"])
+                            assert len(actual_ids) <= total, "Continuation repeated catalog results"
+                            arguments = result["next_request"]
+            matches = actual_ids == expected_ids
+            assert matches, "Catalog IDs/order differ between browser form and MCP"
+            print(f"catalog {campus}/{search_field}: {total} records, browser/MCP match", flush=True)
+    except Exception as exc:
+        pytest.fail(f"Catalog source comparison: {type(exc).__name__}", pytrace=False)
+    finally:
+        await browser_session.close()
 
 
 @pytest.mark.live

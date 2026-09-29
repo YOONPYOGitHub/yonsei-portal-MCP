@@ -47,7 +47,7 @@ async def main() -> None:
 
         assert courses, "no courses returned - login or scraping failed"
 
-        # --- new contract behaviour (DESIGN §4-ter / §5.1) ------------------
+        # --- Contract checks ---------------------------------------------
         # deadlines carry a source field and come back sorted by due ascending.
         for d in deadlines:
             assert d.get("source") == "calendar", "deadline missing source field"

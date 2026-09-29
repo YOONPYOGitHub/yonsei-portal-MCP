@@ -1,10 +1,8 @@
 """학사행정(ERP, underwood1.yonsei.ac.kr) scrapers.
 
-The ERP is a WebSquare MDI app whose grids stay stuck on "LOADING..." when run
-headless, so we do **not** scrape the DOM. Instead each scraper navigates the
-left-menu to the relevant screen and captures the JSON the screen fetches from
-its ``*.do`` endpoints via a ``page.on("response")`` listener (DESIGN §10.2 —
-the "hybrid" philosophy: drive the UI just enough, read the data API).
+The ERP uses cpr/eXBuilder. Each scraper navigates the left menu to the relevant
+screen and captures the JSON fetched from its ``*.do`` endpoints via a
+``page.on("response")`` listener, without depending on rendered grid cells.
 
 Endpoints (validated live):
 - ``findMyGLIOList.do``        → ``dmGlio``           : student profile (name/dept/no)

@@ -635,9 +635,15 @@ COPIES = '''<table class="searchTable"><thead><tr><th>No.</th><th>등록번호</
 def test_book_copies_preserve_per_copy_status_and_blank_due_date():
     result = library.parse_book_copies(COPIES, "CATTOT123")
     assert result["count"] == 2
-    assert result["copies"][0] == {"reg_no": "BOOK1", "call_number": "123 A", "location": "Central 2F", "status_raw": "대출가능", "due_date_raw": ""}
+    assert result["copies"][0] == {"reg_no": "BOOK1", "call_number": "123 A", "location": "Central 2F", "status_raw": "대출가능", "due_date_raw": "", "campus": None}
     assert result["copies"][1]["due_date_raw"] == "2026-10-01"
     assert "secret-action" not in str(result) and "Reserve" not in str(result)
+
+
+@pytest.mark.parametrize(("location", "campus"), [("[신촌]도서관/2층/", "sinchon"), ("[국제]언더우드/", "international"), ("[미래]도서관/", "mirae"), ("Other", None)])
+def test_copy_campus_keeps_unknown_locations_unknown(location, campus):
+    result = library.parse_book_copies(COPIES.replace("Central 2F", location), "CATTOT123")
+    assert all(copy["campus"] == campus and copy["location"] == location for copy in result["copies"])
 
 
 @pytest.mark.parametrize("html", ["<h1>Unavailable</h1>", COPIES.replace("청구기호", "Changed"), COPIES.replace("<td>BOOK1</td>", ""), COPIES.replace("<td>BOOK1</td>", "<td></td>")])

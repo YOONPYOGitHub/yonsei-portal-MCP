@@ -1,4 +1,4 @@
-"""In-process TTL cache for read-only scraper results (DESIGN §5.1).
+"""In-process TTL cache for read-only scraper results.
 
 The MCP server is a single long-lived process, so a tiny monotonic-clock cache
 collapses repeated identical reads (e.g. an LLM calling get_lms_overview then
@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from typing import Any, Awaitable, Callable, Hashable
 
-# Per-resource TTLs in seconds (DESIGN §5.1: low-freq 30-60min, high-freq 5min).
+# Per-resource TTLs in seconds.
 COURSES_TTL = 1800
 DEADLINES_TTL = 300
 NOTICES_TTL = 300

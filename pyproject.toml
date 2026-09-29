@@ -1,6 +1,6 @@
 [project]
 name = "yonsei-portal-mcp"
-version = "0.4.0"
+version = "0.5.0b1"
 description = "연세대학교 포털/LearnUs/도서관 조회용 MCP 서버 (read-only)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "anyio>=4.5",
-    "mcp>=1.2.0",
+    "mcp>=1.27.2,<2",
     "playwright>=1.44.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",

@@ -1,4 +1,4 @@
-"""Structured error types (DESIGN §2.5).
+"""Structured error types.
 
 Every recoverable failure surfaces a stable ``code`` so the MCP client / LLM can
 react deterministically instead of pattern-matching on free-form messages. The

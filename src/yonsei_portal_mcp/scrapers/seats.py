@@ -1,4 +1,4 @@
-"""Public (no-login) library seat availability (DESIGN §10.6, P1).
+"""Public (no-login) library seat availability.
 
 The library home page's seat widget calls ``GET /seat/info`` which returns a
 campus-level aggregate as JSON **without authentication**. We expose that as a

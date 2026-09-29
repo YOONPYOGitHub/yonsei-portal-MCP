@@ -359,20 +359,33 @@ async def get_library_seats(seat_type: Optional[str] = None) -> dict:
 
 
 @mcp.tool()
-async def search_library_books(query: str, page: int = 1, limit: int = 10) -> dict:
+async def search_library_books(query: str, page: int = 1, limit: int = 10, campus: str = "all", search_field: str = "all", offset: int = 0) -> dict:
     """연세 도서관 소장자료를 검색합니다(로그인·브라우저 불필요).
 
     query는 1~200자 검색어, page는 1~100, limit은 1~10입니다.
-    query, page, count, results를 반환하며 count는 반환한 현재 페이지 건수입니다.
-    각 결과: title, author, publisher, published_year, material_type, url,
-    holdings(소장처 location과 표시된 대출 상태 status). 대출·예약은 수행하지
-    않습니다. 소장 상태는 5분 캐시이므로 실제 이용 전 원문에서 재확인하세요.
+    campus: all(기본)/sinchon(신촌)/international(국제)/sinchon_international(신촌+국제)/mirae(미래).
+    search_field: all(기본 전체항목)/title(서명)/author(저자). offset은 현재 원문 페이지의 0~9 위치입니다.
+    total은 검색 조건에 맞는 전체 자료 건수, count는 이번 반환 자료 건수이며 복본 수가 아닙니다.
+    displayed_total은 원문 출력 대상 수이고 source_limited=true이면 원문 자체가 일부만 제공하므로 전체 수집 완료가 아닙니다.
+    results는 catalog_id, detail_supported, title, author, publisher, published_year,
+    material_type, url, holdings(location/status/campus)를 포함합니다.
+    전체 목록·누락 없는 집계가 필요하면 next_request의 인자를 그대로 이어 호출하세요.
+    limit 때문에 현재 페이지에 남은 자료가 있으면 truncated=true이며 같은 page의 다음 offset이 반환됩니다.
+    has_next=false는 이후 자료가 없음을 뜻하며 이전 페이지까지 수집했음을 보장하지 않습니다.
+    page_limit_reached=true이면 100페이지 상한으로 전체 수집이 불가능합니다.
+    detail_supported=true인 자료의 실제 복본·대출 상태는 get_library_book_detail로 확인하세요.
+    전체 복본 집계에서는 검색 결과 중 해당 작품의 모든 판본 catalog_id를 목록으로 만들고,
+    각 ID의 상세 조회 완료 여부를 대조해 누락 없이 확인하세요. holdings 요약만으로 복본 수를 추정하지 마세요.
+    검색 캠퍼스와 복본 목록의 캠퍼스는 다를 수 있으므로 요청 캠퍼스 복본만 따로 집계하세요.
+    filters_verified, source_url, fetched_at을 반환합니다. 페이지 사이 자료가 바뀔 수 있으므로
+    전체 수집 시 catalog_id 중복·고유 건수와 total을 대조하세요. 5분 캐시이며 쓰기 작업은 없습니다.
     """
+    library.validate_book_search(query, page, limit, campus=campus, search_field=search_field, offset=offset)
     query = query.strip()
     return await cache.cached(
-        ("search_library_books", query, page, limit),
+        ("search_library_books", query, page, limit, campus, search_field, offset),
         cache.LIBRARY_SEARCH_TTL,
-        lambda: library.fetch_book_search(query, page=page, limit=limit),
+        lambda: library.fetch_book_search(query=query, page=page, limit=limit, campus=campus, search_field=search_field, offset=offset),
     )
 
 
@@ -669,8 +682,9 @@ async def get_lms_gradebook(course_id: str, include_feedback: bool = False) -> d
 async def get_library_book_detail(catalog_id: str) -> dict:
     """도서관 소장자료의 복본별 상세 상태를 조회합니다(로그인·브라우저 불필요).
 
-    catalog_id는 search_library_books가 반환한 URL의 /search/detail/CATTOT숫자 부분입니다.
-    count와 copies(reg_no, call_number, location, status_raw, due_date_raw)를 반환합니다.
+    catalog_id는 search_library_books 결과의 detail_supported=true인 catalog_id입니다.
+    count는 복본 수이고 copies(reg_no, call_number, location, campus, status_raw, due_date_raw)를 반환합니다.
+    campus는 sinchon/international/mirae 또는 미확인 null이며 원문 location도 보존합니다.
     현재는 CATTOT 소장자료만 지원합니다. 반납예정일 빈 값이나 상태 문구만으로
     예약 가능 여부를 추정하지 마세요. 예약 버튼·차용자 정보는 읽지 않습니다.
     5분 캐시이며 source_url/fetched_at 포함. 실제 이용 전 원문에서 재확인하세요.

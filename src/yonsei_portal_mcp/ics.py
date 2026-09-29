@@ -1,4 +1,4 @@
-"""Pure, dependency-free iCalendar (RFC 5545) export (DESIGN §10.7 P1).
+"""Pure, dependency-free iCalendar (RFC 5545) export.
 
 The portal scrapers already hand back KST ISO-8601 due times for LearnUs
 deadlines and date strings for library loan due dates, so turning them into an

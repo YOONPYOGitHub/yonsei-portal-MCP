@@ -179,8 +179,7 @@ class BrowserSession:
     async def run(self, action: Callable[[Page], Awaitable[T]]) -> T:
         """Run ``action`` on an authenticated page, re-logging in once on failure.
 
-        Covers the 60-minute session expiry case (DESIGN §2.5): if the first
-        attempt fails for a non-auth reason (timeout / stale cookies) we drop the
+        If the first attempt fails for a non-auth reason (timeout / stale cookies), we drop the
         cached session and retry exactly once with a fresh login.
         """
         async with self._lock:
@@ -286,7 +285,7 @@ class LearnUsSession(BrowserSession):
         await self._save_storage_state()
 
     async def _raise_login_failure(self, page: Page) -> None:
-        """Classify why the login did not complete (DESIGN §2.5)."""
+        """Classify why the login did not complete."""
         body = ""
         try:
             body = (await page.inner_text("body"))[:4000]

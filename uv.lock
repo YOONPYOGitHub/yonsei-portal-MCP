@@ -1334,7 +1334,7 @@ wheels = [
 
 [[package]]
 name = "yonsei-portal-mcp"
-version = "0.4.0"
+version = "0.5.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -1361,7 +1361,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "certifi", specifier = ">=2024.2.2" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "mcp", specifier = ">=1.2.0" },
+    { name = "mcp", specifier = ">=1.27.2,<2" },
     { name = "openai", marker = "extra == 'llm'", specifier = ">=1.82" },
     { name = "playwright", specifier = ">=1.44.0" },
     { name = "pytest", marker = "extra == 'llm'", specifier = ">=8.0" },

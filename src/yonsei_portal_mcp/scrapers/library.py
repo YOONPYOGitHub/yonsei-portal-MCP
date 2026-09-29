@@ -1,7 +1,7 @@
 """Yonsei Library public HTTP and authenticated Playwright scrapers.
 
 Catalog and notices use public HTML. Loans and room seats use authenticated
-pages. Personal loan data is returned to the caller, never logged (DESIGN §6).
+pages. Personal loan data is returned to the caller, never logged.
 """
 from __future__ import annotations
 
@@ -20,6 +20,13 @@ MYLOAN_URL = "https://library.yonsei.ac.kr/myloan/list"
 MYRESERVE_URL = "https://library.yonsei.ac.kr/myreserve/integratedList"
 SEAT_ROOMS_URL = "https://library.yonsei.ac.kr/relation/seat"
 LIBRARY_BASE = "https://library.yonsei.ac.kr"
+_SINCHON_COLLECTIONS = "YNLIB;GSISL;MUSEL;OTHER;UGSTL;YSLIB;ARCHL;BUSIL;KORCL;IOKSL;LAWSL;MULTL;MATHL;MUSIC"
+_CATALOG_CAMPUSES = {
+    "all": None, "sinchon": _SINCHON_COLLECTIONS,
+    "international": "UML", "sinchon_international": _SINCHON_COLLECTIONS + ";UML",
+    "mirae": "WLIBR",
+}
+_CATALOG_FIELDS = {"all": "TOTAL", "title": "1", "author": "2"}
 
 
 def _library_detail_url(href: str, prefix: str) -> str:
@@ -31,6 +38,11 @@ def _library_detail_url(href: str, prefix: str) -> str:
     ):
         raise ScrapeFailedError("도서관 상세 링크 주소를 확인하지 못했습니다.")
     return LIBRARY_BASE + parsed.path
+
+
+def _location_campus(location: str) -> str | None:
+    match = re.match(r"^\[(신촌|국제|미래)\]", location.strip())
+    return {"신촌": "sinchon", "국제": "international", "미래": "mirae"}[match[1]] if match else None
 
 
 def parse_book_search(html: str) -> list[dict]:
@@ -56,7 +68,8 @@ def parse_book_search(html: str) -> list[dict]:
             badge = location.select_one(".availableBtn")
             status = badge.get_text(" ", strip=True) if badge else ""
             text = location.get_text(" ", strip=True)
-            holdings.append({"location": text.removesuffix(status).strip() if status else text, "status": status or None})
+            raw_location = text.removesuffix(status).strip() if status else text
+            holdings.append({"location": raw_location, "status": status or None, "campus": _location_campus(raw_location)})
         books.append({
             "title": link.get_text(" ", strip=True),
             "author": fields.get("저자"),
@@ -64,6 +77,8 @@ def parse_book_search(html: str) -> list[dict]:
             "published_year": fields.get("출판년"),
             "material_type": fields.get("자료유형"),
             "url": url,
+            "catalog_id": urlsplit(url).path.rsplit("/", 1)[-1],
+            "detail_supported": bool(re.fullmatch(r"CATTOT[0-9]{1,20}", urlsplit(url).path.rsplit("/", 1)[-1])),
             "holdings": holdings,
         })
     if not books:
@@ -99,24 +114,106 @@ def parse_library_notices(html: str) -> list[dict]:
     return notices
 
 
-async def fetch_book_search(query: str, page: int = 1, limit: int = 10) -> dict:
-    """Search the public catalog without login, cookies, or a browser."""
-    query = query.strip()
-    if not query or len(query) > 200:
+def validate_book_search(query: str, page: int = 1, limit: int = 10, *, campus: str = "all", search_field: str = "all", offset: int = 0) -> None:
+    if not isinstance(query, str) or not 1 <= len(query.strip()) <= 200:
         raise ValueError("query는 1~200자의 검색어여야 합니다.")
-    if not 1 <= page <= 100 or not 1 <= limit <= 10:
+    if type(page) is not int or not 1 <= page <= 100 or type(limit) is not int or not 1 <= limit <= 10:
         raise ValueError("page는 1~100, limit은 1~10이어야 합니다.")
+    if campus not in _CATALOG_CAMPUSES or search_field not in _CATALOG_FIELDS:
+        raise ValueError("campus는 all/sinchon/international/sinchon_international/mirae, search_field는 all/title/author입니다.")
+    if type(offset) is not int or not 0 <= offset < 10:
+        raise ValueError("offset은 현재 페이지 내 0~9 위치입니다. next_request를 사용하세요.")
+
+
+def _catalog_state(html: str, params: dict, record_count: int) -> tuple[int, int, int]:
+    soup = BeautifulSoup(html, "html.parser")
+    counters = soup.select(".searchCnt")
+    if len(counters) != 1:
+        raise ScrapeFailedError("도서 검색 전체 건수를 확인하지 못했습니다.")
+    values = [element.get_text(strip=True) for element in counters[0].select("strong")]
+    if len(values) != 2 or any(not re.fullmatch(r"[0-9]+(?:,[0-9]{3})*", value) for value in values):
+        raise ScrapeFailedError("도서 검색 전체 건수 형식이 변경되었습니다.")
+    source_total, total = (int(value.replace(",", "")) for value in values)
+    if total > source_total:
+        raise ScrapeFailedError("도서 검색 전체 건수와 표시 범위가 모순됩니다.")
+    for key, expected in params.items():
+        if key == "pn":
+            continue
+        actual = {str(element.get("value", "")) for element in soup.select(f'input[type="hidden"][name="{key}"]')}
+        if actual != {str(expected)}:
+            raise ScrapeFailedError("도서 검색 원문이 요청 조건을 확인해 주지 않았습니다.")
+    if "lmt0" not in params:
+        scope = {str(element.get("value", "")) for element in soup.select('input[type="hidden"][name="lmt0"]')}
+        if scope - {"", "TOTAL"}:
+            raise ScrapeFailedError("도서 검색 캠퍼스 조건이 요청과 다릅니다.")
+    selected = soup.select('select[name="cpp"] option[selected]')
+    if len(selected) != 1 or selected[0].get("value") != "10":
+        raise ScrapeFailedError("도서 검색 페이지 크기를 확인하지 못했습니다.")
+    total_pages = (total + 9) // 10
+    page = params["pn"]
+    current = {int(element.get_text(strip=True)) for element in soup.select(".paging span") if not element.find() and re.fullmatch(r"[0-9]+", element.get_text(strip=True))}
+    if total and current != {page}:
+        raise ScrapeFailedError("도서 검색 현재 페이지가 요청과 다릅니다.")
+    if page > max(1, total_pages) or record_count != min(10, max(0, total - (page - 1) * 10)):
+        raise ScrapeFailedError("도서 검색 페이지 범위·행 수가 전체 건수와 다릅니다.")
+    if page < total_pages:
+        next_links = []
+        for anchor in soup.select(".paging a[href]"):
+            parsed = urlsplit(urljoin(LIBRARY_BASE + "/search/tot/result", str(anchor["href"])))
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            if query.get("pn") == [str(page + 1)]:
+                try:
+                    valid = parsed.scheme == "https" and parsed.hostname == "library.yonsei.ac.kr" and parsed.port in (None, 443) and not parsed.username and not parsed.password and parsed.path == "/search/tot/result"
+                except ValueError:
+                    valid = False
+                if not valid or any(query.get(key) != [str(value)] for key, value in params.items() if key != "pn"):
+                    raise ScrapeFailedError("다음 검색 페이지 링크의 조건 또는 출처가 다릅니다.")
+                next_links.append(anchor)
+        if not next_links:
+            raise ScrapeFailedError("검색 전체 건수에 해당하는 다음 페이지 링크가 없습니다.")
+    return source_total, total, total_pages
+
+
+async def fetch_book_search(query: str, page: int = 1, limit: int = 10, *, campus: str = "all", search_field: str = "all", offset: int = 0) -> dict:
+    """Search the public catalog without login, cookies, or a browser."""
+    validate_book_search(query, page, limit, campus=campus, search_field=search_field, offset=offset)
+    query = query.strip()
+    params = {"st": "KWRD", "si": _CATALOG_FIELDS[search_field], "q": query, "pn": page, "cpp": 10}
+    if campus != "all":
+        params.update(lmt0=_CATALOG_CAMPUSES[campus], lmtsn="000000000006", lmtst="OR")
     try:
         html = await httpclient.get_html(
             LIBRARY_BASE + "/search/tot/result",
-            params={"st": "KWRD", "si": "TOTAL", "q": query, "pn": page},
+            params=params,
         )
     except httpx.TimeoutException:
         raise UpstreamTimeoutError("도서 검색 응답 시간이 초과되었습니다.") from None
     except httpx.HTTPError:
         raise ScrapeFailedError("도서 검색 페이지를 불러오지 못했습니다.") from None
-    books = parse_book_search(html)[:limit]
-    return {"query": query, "page": page, "count": len(books), "results": books}
+    page_books = parse_book_search(html)
+    total, displayed_total, total_pages = _catalog_state(html, params, len(page_books))
+    if offset and offset >= len(page_books):
+        raise ValueError("offset이 현재 검색 페이지의 자료 수를 벗어났습니다.")
+    books = page_books[offset:offset + limit]
+    next_offset = offset + len(books)
+    truncated = next_offset < len(page_books)
+    has_next = truncated or page < total_pages
+    next_page = page if truncated else page + 1 if has_next else None
+    page_limit_reached = has_next and next_page > 100
+    next_request = None
+    if has_next and not page_limit_reached:
+        next_request = {"query": query, "page": next_page, "limit": limit, "campus": campus, "search_field": search_field, "offset": next_offset if truncated else 0}
+    return {
+        "query": query, "page": page, "offset": offset, "count": len(books), "results": books,
+        "total": total, "displayed_total": displayed_total, "source_limited": displayed_total < total,
+        "total_pages": total_pages, "page_size": 10, "page_count": len(page_books),
+        "truncated": truncated, "has_next": has_next, "next_page": next_page, "next_request": next_request,
+        "page_limit_reached": page_limit_reached,
+        "filters": {"campus": campus, "search_field": search_field}, "filters_verified": True,
+        "source_url": LIBRARY_BASE + "/search/tot/result?" + urlencode(params),
+        "fetched_at": datetime.now(timezone.utc).isoformat(),
+        "note": "count/total은 자료 건수이며 복본 수가 아닙니다. 모든 결과가 필요하면 next_request를 그대로 이어 호출하세요. source_limited=true면 원문 자체가 일부만 제공합니다. truncated는 현재 페이지 내 생략을 뜻합니다. 페이지 사이 결과가 바뀔 수 있어 전체 수집 시 catalog_id로 중복/건수를 대조하세요.",
+    }
 
 
 def parse_book_copies(html: str, catalog_id: str) -> dict:
@@ -137,6 +234,7 @@ def parse_book_copies(html: str, catalog_id: str) -> dict:
             if not item["reg_no"] or not item["location"] or not item["status_raw"] or item["reg_no"] in seen:
                 raise ScrapeFailedError("도서 복본 식별자/상태가 없거나 중복되었습니다.")
             seen.add(item["reg_no"])
+            item["campus"] = _location_campus(item["location"])
             copies.append(item)
     if not copies:
         raise ScrapeFailedError("도서 복본 소장 표를 확인하지 못했습니다. 미소장을 의미하지 않습니다.")

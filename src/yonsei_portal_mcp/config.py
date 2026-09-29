@@ -72,7 +72,7 @@ def load_settings() -> Settings:
     # Default to headless for unattended MCP server use. Set YONSEI_HEADED=true
     # for the very first login or whenever 2FA / CAPTCHA must be solved manually.
     headed = os.getenv("YONSEI_HEADED", "false").lower() in {"1", "true", "yes"}
-    # System-scoped session file (DESIGN §2.5): LearnUs and ERP get separate
+    # System-scoped session file: LearnUs and ERP get separate
     # cookie stores. Default is .session/learnus.json; legacy override honoured.
     storage = Path(os.getenv("YONSEI_STORAGE_STATE", ".session/learnus.json"))
     storage.parent.mkdir(parents=True, exist_ok=True)

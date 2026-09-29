@@ -422,7 +422,7 @@ async def fetch_deadlines(
 ) -> list[dict]:
     """Return upcoming assignment / activity deadlines from the calendar.
 
-    Each item carries a ``source`` field (DESIGN §4-ter) so callers can tell
+    Each item carries a ``source`` field so callers can tell
     where a deadline came from, plus a ``kind`` field
     (``assignment`` / ``progress`` / ``completion``; see :func:`_deadline_kind`)
     so callers can distinguish real submissions from online-lecture progress or
@@ -467,7 +467,7 @@ async def fetch_deadlines(
 
 
 async def fetch_notice_body(page: Page, url: str) -> dict:
-    """Return the full text body of a single notice/board article (DESIGN §4-ter).
+    """Return the full text body of a single notice/board article.
 
     The MCP layer hands the body back to the LLM to summarise; we do not
     summarise here. ``url`` must be a LearnUs board article URL as returned by

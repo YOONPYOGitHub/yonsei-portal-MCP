@@ -1,4 +1,4 @@
-"""Shared httpx helper for the no-browser (hybrid) scraper path (DESIGN §10.2).
+"""Shared httpx helper for the no-browser scraper path.
 
 Some Yonsei endpoints (e.g. ``library.yonsei.ac.kr/seat/info``) serve their TLS
 leaf certificate **without** the Sectigo intermediate, so a stock ``certifi``

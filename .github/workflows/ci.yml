@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    env:
+      PYTHON_VERSION: ${{ matrix.python-version }}
+      PYTHON_DOTENV_DISABLED: "1"
+      RUN_LIVE_PORTAL: "0"
+      RUN_LIVE_LLM: "0"
+      UV_PYTHON_DOWNLOADS: never
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
+        with:
+          version: "0.11.26"
+          enable-cache: true
+      - name: Install locked dependencies and Chromium
+        run: |
+          uv sync --frozen --extra llm --python "$PYTHON_VERSION"
+          uv run --no-sync playwright install --with-deps chromium
+      - name: Offline regression tests
+        run: uv run --offline --no-sync python -m pytest -m "not live and not llm" -q --tb=short
+      - name: Build distributions
+        run: uv build --out-dir "$RUNNER_TEMP/dist"
+      - name: Install wheel outside the source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv venv --python "$PYTHON_VERSION" "$RUNNER_TEMP/wheel-env"
+          wheels=("$RUNNER_TEMP"/dist/*.whl)
+          [[ ${#wheels[@]} -eq 1 ]]
+          uv pip install --python "$RUNNER_TEMP/wheel-env/bin/python" "${wheels[0]}" "pytest>=8" "pytest-asyncio>=0.24"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-env/bin/python" -I - <<'PY'
+          import sys
+          from pathlib import Path
+          import yonsei_portal_mcp
+          assert Path(yonsei_portal_mcp.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
+          PY
+          "$RUNNER_TEMP/wheel-env/bin/python" -I -m pytest -c /dev/null -p no:cacheprovider --import-mode=importlib "$GITHUB_WORKSPACE/tests/test_packaging.py" -q --tb=short

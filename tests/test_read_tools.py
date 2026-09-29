@@ -475,13 +475,143 @@ NOTICE_HTML = """
 """
 
 
+def _catalog_document(*, total=22, page=1, query="위키드", campus="all", search_field="all"):
+    from html import escape
+    params = {"st": "KWRD", "si": library._CATALOG_FIELDS[search_field], "q": query, "cpp": "10"}
+    if campus != "all":
+        params.update(lmt0=library._CATALOG_CAMPUSES[campus], lmtsn="000000000006", lmtst="OR")
+    controls = ''.join(f'<input type="hidden" name="{key}" value="{escape(value, quote=True)}">' for key, value in params.items())
+    start = (page - 1) * 10
+    rows = ''.join(BOOK_HTML.replace("CATTOT123", f"CATTOT{number}") for number in range(start + 1, min(start + 10, total) + 1))
+    page_count = (total + 9) // 10
+    pager = ''.join(f'<span>{number}</span>' if number == page else f'<a href="?{escape(urlencode({**params, "pn": number}), quote=True)}">{number}</a>' for number in range(1, page_count + 1))
+    return f'<p class="searchCnt">총 <strong>{total}</strong>건 중 <strong>{total}</strong>건 출력</p><form>{controls}</form><select name="cpp"><option value="10" selected>10</option></select><div class="paging"><span>{pager}</span></div>{rows}'
+
+
+@pytest.mark.asyncio
+async def test_catalog_continuation_does_not_skip_locally_limited_results(monkeypatch):
+    async def fetch(url, *, params):
+        return _catalog_document(page=params["pn"])
+    monkeypatch.setattr(httpclient, "get_html", fetch)
+    request = {"query": "위키드", "limit": 3}
+    seen, pages = [], []
+    while request is not None:
+        result = await library.fetch_book_search(**request)
+        assert result["total"] == 22 and result["total_pages"] == 3
+        assert result["page_size"] == 10 and result["filters_verified"] is True
+        assert result["has_next"] == (result["next_request"] is not None)
+        seen.extend(item["url"].rsplit("/", 1)[-1] for item in result["results"])
+        pages.append((result["page"], result["offset"]))
+        request = result["next_request"]
+        assert len(pages) <= 10
+    assert seen == [f"CATTOT{number}" for number in range(1, 23)]
+    assert pages == [(1, 0), (1, 3), (1, 6), (1, 9), (2, 0), (2, 3), (2, 6), (2, 9), (3, 0)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("total", "page", "count", "next_page"), [(32, 3, 10, 4), (32, 4, 2, None), (0, 1, 0, None)])
+async def test_catalog_metadata_reports_final_page_and_explicit_zero(monkeypatch, total, page, count, next_page):
+    monkeypatch.setattr(httpclient, "get_html", AsyncMock(return_value=_catalog_document(total=total, page=page)))
+    result = await library.fetch_book_search("위키드", page=page)
+    assert result["count"] == count and result["total"] == total
+    assert result["displayed_total"] == total and result["source_limited"] is False
+    assert result["next_page"] == next_page and result["has_next"] == (next_page is not None)
+    assert result["source_url"].startswith(library.LIBRARY_BASE) and result["fetched_at"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", [
+    lambda html: html.replace('value="TOTAL"', 'value="1"'),
+    lambda html: html.replace('value="위키드"', 'value="different"'),
+    lambda html: html.replace('<span>1</span>', '<span>2</span>'),
+    lambda html: html.replace('value="10" selected', 'value="20" selected'),
+    lambda html: html.replace('<strong>22</strong>', '<strong>0</strong>'),
+    lambda html: html.replace('<p class="searchCnt">', '<p class="changed">'),
+    lambda html: html.replace('href="?', 'href="https://example.test/?'),
+    lambda html: html.replace('href="?', 'data-disabled="?'),
+    lambda html: html.replace('<form>', '<form><input type="hidden" name="q" value="conflicting">'),
+    lambda html: html.replace('CATTOT2', 'CATTOT1'),
+])
+async def test_catalog_rejects_changed_conditions_or_missing_metadata(monkeypatch, mutation):
+    monkeypatch.setattr(httpclient, "get_html", AsyncMock(return_value=mutation(_catalog_document())))
+    with pytest.raises(ScrapeFailedError):
+        await library.fetch_book_search("위키드")
+
+
+@pytest.mark.asyncio
+async def test_catalog_preserves_source_total_when_displayed_results_are_limited(monkeypatch):
+    html = _catalog_document(total=22, page=3).replace("<strong>22</strong>", "<strong>32</strong>", 1)
+    monkeypatch.setattr(httpclient, "get_html", AsyncMock(return_value=html))
+    result = await library.fetch_book_search("위키드", page=3)
+    assert result["total"] == 32 and result["displayed_total"] == 22
+    assert result["source_limited"] is True and result["total_pages"] == 3
+    assert result["has_next"] is False and result["next_request"] is None
+
+
 def test_public_book_parser_maps_fields_and_canonical_url() -> None:
     assert library.parse_book_search(BOOK_HTML) == [{
         "title": "Example AI", "author": "Example Author", "publisher": "Example Press",
         "published_year": "2026", "material_type": "Book",
         "url": "https://library.yonsei.ac.kr/search/detail/CATTOT123",
-        "holdings": [{"location": "Central", "status": "Available"}],
+        "catalog_id": "CATTOT123", "detail_supported": True,
+        "holdings": [{"location": "Central", "status": "Available", "campus": None}],
     }]
+
+
+@pytest.mark.parametrize(("location", "campus"), [("[신촌]도서관/2층/", "sinchon"), ("[국제]언더우드/", "international"), ("[미래]도서관/", "mirae"), ("Other", None)])
+def test_catalog_holdings_preserve_raw_location_and_normalize_campus(location, campus):
+    result = library.parse_book_search(BOOK_HTML.replace("Central", location).replace("CATTOT123", "OTHER123"))[0]
+    assert result["holdings"][0]["location"] == location
+    assert result["holdings"][0]["campus"] == campus
+    assert result["catalog_id"] == "OTHER123" and result["detail_supported"] is False
+
+
+@pytest.mark.asyncio
+async def test_catalog_tool_forwards_and_caches_all_options(monkeypatch):
+    fetch = AsyncMock(return_value={"results": []})
+    monkeypatch.setattr(library, "fetch_book_search", fetch)
+    cache.clear()
+    try:
+        for options in ({}, {"campus": "sinchon"}, {"search_field": "author"}, {"offset": 3}):
+            arguments = {"query": "위키드", "page": 1, "limit": 3, "campus": "all", "search_field": "all", "offset": 0, **options}
+            await server.search_library_books(**arguments)
+            await server.search_library_books(**arguments)
+            fetch.assert_awaited_with(**arguments)
+        assert fetch.await_count == 4
+        with pytest.raises(ValueError):
+            await server.search_library_books("위키드", offset=-1)
+        assert fetch.await_count == 4
+        schema = next(tool.inputSchema for tool in await server.mcp.list_tools() if tool.name == "search_library_books")
+        assert set(schema["properties"]) == {"query", "page", "limit", "campus", "search_field", "offset"}
+    finally:
+        cache.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("offset", [-1, 10, 0.5, True])
+async def test_catalog_rejects_invalid_offset_before_io(monkeypatch, offset):
+    fetch = AsyncMock()
+    monkeypatch.setattr(httpclient, "get_html", fetch)
+    with pytest.raises(ValueError):
+        await library.fetch_book_search("위키드", offset=offset)
+    fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_catalog_page_bound_is_not_claimed_as_complete(monkeypatch):
+    monkeypatch.setattr(httpclient, "get_html", AsyncMock(return_value=_catalog_document(total=1001, page=100)))
+    result = await library.fetch_book_search("위키드", page=100)
+    assert result["has_next"] is True and result["page_limit_reached"] is True
+    assert result["next_request"] is None and result["next_page"] == 101
+
+
+@pytest.mark.asyncio
+async def test_catalog_rejects_ignored_campus_and_past_last_row(monkeypatch):
+    monkeypatch.setattr(httpclient, "get_html", AsyncMock(return_value=_catalog_document(total=2)))
+    with pytest.raises(ScrapeFailedError):
+        await library.fetch_book_search("위키드", campus="sinchon")
+    with pytest.raises(ValueError):
+        await library.fetch_book_search("위키드", offset=2)
 
 
 def test_library_notices_are_deduplicated_without_author() -> None:
@@ -554,15 +684,36 @@ async def test_public_html_blocks_unsafe_redirect(monkeypatch, location) -> None
 
 @pytest.mark.asyncio
 async def test_book_search_uses_public_http(monkeypatch) -> None:
-    fetch = AsyncMock(return_value=BOOK_HTML)
+    fetch = AsyncMock(return_value=_catalog_document(total=11, page=2, query="AI & ML"))
     monkeypatch.setattr(httpclient, "get_html", fetch, raising=False)
     result = await library.fetch_book_search("  AI & ML  ", page=2, limit=1)
     assert result["query"] == "AI & ML"
     assert result["page"] == 2 and result["count"] == 1
     fetch.assert_awaited_once_with(
         "https://library.yonsei.ac.kr/search/tot/result",
-        params={"st": "KWRD", "si": "TOTAL", "q": "AI & ML", "pn": 2},
+        params={"st": "KWRD", "si": "TOTAL", "q": "AI & ML", "pn": 2, "cpp": 10},
     )
+
+
+@pytest.mark.asyncio
+async def test_book_search_sends_verified_campus_and_title_filters(monkeypatch):
+    fetch = AsyncMock(return_value=_catalog_document(campus="sinchon_international", search_field="title"))
+    monkeypatch.setattr(httpclient, "get_html", fetch)
+    await library.fetch_book_search("위키드", campus="sinchon_international", search_field="title")
+    params = fetch.call_args.kwargs["params"]
+    assert params["si"] == "1"
+    assert params["lmt0"] == "YNLIB;GSISL;MUSEL;OTHER;UGSTL;YSLIB;ARCHL;BUSIL;KORCL;IOKSL;LAWSL;MULTL;MATHL;MUSIC;UML"
+    assert params["lmtsn"] == "000000000006" and params["lmtst"] == "OR"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("options", [{"campus": "unknown"}, {"search_field": "publisher"}])
+async def test_book_search_rejects_unknown_filters_before_network(monkeypatch, options):
+    fetch = AsyncMock()
+    monkeypatch.setattr(httpclient, "get_html", fetch)
+    with pytest.raises(ValueError):
+        await library.fetch_book_search("위키드", **options)
+    fetch.assert_not_awaited()
 
 
 @pytest.mark.asyncio
