@@ -2,9 +2,32 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)을 따르며,
-버전 체계는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
+Python 패키지 버전은 [PEP 440](https://peps.python.org/pep-0440/)의 베타 표기(`0.5.0b2`)를 사용합니다.
 
 ## [Unreleased]
+
+## [0.5.0b2] - 2026-10-04
+
+Source beta update; this entry does not assert a PyPI publication or GitHub Release.
+
+### Security
+- Validate school HTTPS origins and credential form destinations before login; reject host-substring lookalikes and unexpected origins. Preserve normal Yonsei SSO.
+- Protect local cookie storage with private POSIX permissions, symlink/unsafe-state rejection and atomic writes. Windows users must also configure private ACLs. Secrets are excluded from settings repr.
+- Update audited runtime dependencies, including MCP 1.30.0; require MCP >=1.28.1,<2 and anyio >=4.14.2,<5. No API keys or school credentials are needed for CI.
+- Respect dotenv opt-out across the application and the SDK settings loader; isolate credential-free tests.
+- Restrict notice URL query keys and ERP response origins, and allowlist ERP grade-term output fields.
+
+### Compatibility and reliability
+- All MCP tools reject unknown arguments and invalid input types. Misspelled filters no longer silently widen queries; invalid scopes/IDs fail before authentication.
+- Attendance tables with duplicate/effective-key collisions, inconsistent cell counts or no verified data rows fail explicitly. Normal blank headings remain supported as positional colN keys.
+- Coalesce identical in-flight cache requests and cap completed entries; preserve cancellation/failure isolation and clear semantics. Overview and component caches remain independent.
+- Keep all 34 tool names. Clients should refresh tools/list after updating; stricter inputs and minimized grade-term fields are intentional behavior changes.
+
+### Public repository
+- Separate normal school/MCP configuration from optional developer LLM examples. Add Hermes setup, security reporting, contributing and third-party scope guides.
+- Preserve MIT license/attribution; add SPDX license metadata and license-file packaging. University content, trademarks and personal data are not licensed by the project's MIT grant.
+- Add a credential-free dev extra and regression tests; extend offline CI to macOS in addition to the existing Linux/Python matrix.
+- Ignore private local agent reports, environment variants and build/test artifacts. New read-only portal features remain a roadmap, not claimed support.
 
 ### Changed
 - 공개 좌석 도구를 익명 Chromium의 홈페이지 표 조회로 변경. `total/in_use/remaining`은 실제 셀 값, `display_verified=true`, `scope=homepage_display`. 0행과 합계 모순을 보존하고 최상위 합계는 표시 행 합산임을 명시. 로그인은 불필요하지만 Chromium이 필요하며 기존 `raw_use/raw_total_minus_use` 공개 반환은 제거.

@@ -1,6 +1,6 @@
 # 도구 API 참조
 
-**0.5.0b1 개발 소스와 이후 Unreleased 수정**의 MCP 도구 34개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
+**0.5.0b2 소스**의 MCP 도구 34개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
 설치와 연결은 [README](../README.md), 구조와 운영 계약은 [DESIGN](../DESIGN.md), 개발·검증 절차는 [개발 문서](DEVELOPMENT.md)를 참고하세요.
 
 ## 기능별 바로가기
@@ -48,7 +48,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 ### MCP 응답과 오류
 
-각 절의 “반환”은 도구 함수의 논리적 값입니다. 아래 전송 표현은 잠금 환경의 MCP SDK **1.27.2** 기준입니다.
+각 절의 “반환”은 도구 함수의 논리적 값입니다. 아래 전송 표현은 잠금 환경의 MCP SDK **1.30.0** 기준입니다.
 
 | 논리적 반환 | MCP 성공 응답 |
 | --- | --- |
@@ -58,7 +58,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 정상 `CallToolResult.isError`는 `false`입니다. 오류 시 동일한 반환 필드를 기대하지 마세요. 입력·조회 오류는 SDK가 `isError=true`인 도구 결과의 text로 전달할 수 있으며, Python 함수를 직접 호출하면 예외입니다. 이것은 stdio 연결 종료 등 전송 오류나 JSON-RPC 요청 자체의 오류와 다릅니다.
 일부 조회 오류에는 `[AUTH_REQUIRED]`, `[AUTH_FAILED]`, `[MFA_REQUIRED]`, `[SESSION_EXPIRED]`, `[SCRAPE_FAILED]`, `[UPSTREAM_TIMEOUT]` 같은 코드가 텍스트로 포함됩니다. 모든 예외가 이 코드를 갖지는 않으며 자동으로 `{"error":{"code":...}}` 객체를 반환하는 계약은 없습니다. 인증 오류는 설정·로그인 상태를 확인하고, 추출 실패·시간 초과는 데이터 없음이나 0점·0석으로 바꾸지 마세요.
-이력 도구 `get_my_loan_history`, `get_my_reservation_history`, `get_lms_course_history`는 입력 스키마의 `additionalProperties=false`와 서버의 별도 검사로 미등록 인자를 거부합니다. 다른 도구도 표에 없는 인자에 의존하지 마세요. 자료형은 스키마와 Pydantic 검증 대상이지만 숫자 범위·패턴 등은 실행 코드에서 추가 검사하며, 일부 오류 검사는 인증 이후에 이루어집니다.
+모든 도구는 입력 스키마의 `additionalProperties=false`와 서버 검증으로 미등록 인자를 거부합니다. `term_cod` 같은 오타를 무시하고 조회 범위를 넓히지 않습니다. JSON Schema 자료형 검증 후 범위·선택값·ID 검증을 적용합니다. 입력 오류는 인증·세션 초기화의 근거가 아닙니다. `readOnlyHint=true`는 동작 설명이지 별도의 권한 강제 장치가 아닙니다.
 
 ## LearnUs 강좌와 학습
 
@@ -86,7 +86,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 | 인자 | 형식 | 기본값 | 설명 |
 | --- | --- | --- | --- |
-| `scope` | `string` | `"all"` | `all`, `course`, `platform`; 그 밖의 값은 `all`로 처리 |
+| `scope` | `string` | `"all"` | `all`, `course`, `platform`; 그 밖의 값은 오류 |
 
 인증·출처·캐시: LearnUs 로그인, 홈 공지 링크, 계정·범위별 300초.
 반환: 배열. 항목은 `type`(`course`/`platform`), `course`(플랫폼 공지는 `null`), `date`(`YYYY-MM-DD` 또는 `null`), `title`, `url`입니다.
@@ -97,8 +97,8 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 | 인자 | 형식 | 기본값 | 설명 |
 | --- | --- | --- | --- |
 | `query` | `string` | 필수 | 공백으로 나눈 단어를 대소문자 구분 없이 AND 검색; 빈 검색어는 전체 |
-| `scope` | `string` | `"all"` | `all`, `course`, `platform`; 그 밖의 값은 `all` |
-| `limit` | `integer` | `20` | 실행 시 최소 1로 보정; 별도 상한 없음 |
+| `scope` | `string` | `"all"` | `all`, `course`, `platform`; 그 밖의 값은 오류 |
+| `limit` | `integer` | `20` | 1 이상이어야 하며 미만은 오류; 별도 상한 없음 |
 
 인증·출처·캐시: LearnUs 로그인, `get_lms_notices`의 300초 계정·범위 캐시를 공유합니다. 검색 결과 자체는 별도 캐시하지 않습니다.
 반환: `query`, 정규화된 `scope`, `count`, `results`. 각 결과는 공지 항목과 같습니다. 검색 대상은 `title`, `course`, `type`이며 본문은 검색하지 않습니다.
@@ -111,7 +111,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 | `url` | `string` | 필수 | 지원 공지 목록에서 얻은 HTTPS 게시글 URL |
 
 인증·출처·캐시: LearnUs 본문은 로그인·계정별, 도서관 일반공지는 무로그인 공개 HTTP·공유 캐시이며 모두 URL별 1800초.
-입력 검사: HTTPS, 사용자명·비밀번호 없음, 포트 생략 또는 443. LearnUs는 호스트 `ys.learnus.org`, 경로 `/mod/ubboard/article.php`, 단일 `id`(ASCII 숫자 1~20자리)가 필수이고 `bwid`가 있으면 같은 규칙입니다. 이 함수는 그 밖의 쿼리 키를 일괄 금지하지 않습니다. 도서관은 `library.yonsei.ac.kr`의 `/bbs/content/1_숫자`만 지원하며 쿼리·프래그먼트를 제거해 요청합니다.
+입력 검사: HTTPS, 사용자명·비밀번호 없음, 포트 생략 또는 443. LearnUs는 호스트 `ys.learnus.org`, 경로 `/mod/ubboard/article.php`, 단일 `id`(ASCII 숫자 1~20자리)가 필수이고 `bwid`가 있으면 같은 규칙입니다. 쿼리 키는 `id`, `bwid`, `lang`만 허용하며 ID 키의 중복은 거절합니다. 언어는 `ko`로 재구성하고 action/sesskey 같은 미지원 인자는 탐색 전에 거절합니다. 도서관은 `library.yonsei.ac.kr`의 `/bbs/content/1_숫자`만 지원하며 쿼리·프래그먼트를 제거해 요청합니다.
 반환: `url`, `title`, `date`, `author`, `body`, `image_count`, `note`. LearnUs는 제목·날짜·작성자가 `null`일 수 있고 반환 URL에 `lang=ko`가 적용됩니다. 이미지 전용 공지는 `body=""`여도 `image_count>0`과 이미지 미추출 안내를 반환합니다. 본문 컨테이너가 없거나 텍스트·이미지를 모두 확인할 수 없으면 정상 빈 본문 대신 오류입니다. 도서관은 `author=null`, 날짜는 ISO 날짜 또는 `null`입니다. 두 경로 모두 이미지가 없으면 `note=null`입니다.
 범위: 본문 텍스트만 읽으며 요약·이미지 OCR·첨부 다운로드는 하지 않습니다. 이미지 전용 공지를 내용 없는 공지로 요약하거나 이미지 내용을 추측하지 마세요. LearnUs 작성자·본문에 개인정보가 포함될 수 있습니다. 게시글 목록의 `url`을 그대로 사용하고 임의 호스트 열람 용도로 사용하지 마세요.
 
@@ -123,7 +123,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 인증·출처·캐시: LearnUs 로그인, 강좌의 출석/학습 진도 보고서, 계정·강좌별 300초.
 반환: `course_id`, `header`(원문 열 제목 배열), `weeks`(행 객체 배열). 행의 키는 원문 열 이름이며 제목 없는 열 등은 `col0`, `col1`처럼 대체합니다. 셀은 원문 문자열입니다.
-범위: 표 구조가 동적이므로 고정된 출석률·결석 횟수 필드를 가정하지 마세요. 빈 표를 확인하지 못하면 오류이며 출석 없음으로 바꾸지 않습니다. 본인의 출결 정보입니다.
+범위: 표 구조가 동적이므로 고정된 출석률·결석 횟수 필드를 가정하지 마세요. 빈 열 제목은 `col0`처럼 위치 기반 키로 보존합니다. 중복/키 충돌, 셀 수 불일치, 헤더만 있는 표는 값 소실이나 거짓 0건 대신 오류로 반환합니다. 본인의 출결 정보입니다.
 
 ### `get_lms_course_materials`
 
@@ -371,7 +371,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 인증·출처·캐시: ERP 로그인, 전체성적조회 후 로컬 과목·학기 필터, 계정·조건별 1800초. 학기 코드는 10=1학기, 11=여름, 20=2학기, 21=겨울입니다.
 반환: `count`, `courses`, `terms`, `summary`, `summary_scope="all_terms"`, `filters`(`year`, `term_code`). 과목이 없을 때만 `note`를 추가합니다. 과목은 `term`, `year`, `term_code`, `course_code`, `course_name`, `credits`, `grade`, `category`, `professor`; 연도·학기 코드는 문자열, 그 외는 원천 값으로 `null`일 수 있습니다.
-범위: `summary`의 `total_earned_credits`, `gpa`는 항상 전체 학기 누적이며 누락 시 `null`입니다. **`terms`는 필터된 ERP 원천 행을 그대로 반환**하므로 `syy`, `smtDivCd` 외 필드·형식은 고정하지 않으며 내부 필드나 개인정보가 없다고 보장하지 않습니다. 0건을 전체 성적 이력 없음으로 단정하지 마세요.
+범위: `summary`의 `total_earned_credits`, `gpa`는 항상 전체 학기 누적이며 누락 시 `null`입니다. **`terms`는 필터된 학기 행에서 `syy`, `smtDivCd`, `smtDivNm`, `fullNm`, `acqsCdt`, `bwa` 중 존재하는 필드만 반환**합니다. 학교 원천의 미등록 필드는 전달하지 않습니다. 학기·평점 자체는 여전히 개인정보입니다. 0건을 전체 성적 이력 없음으로 단정하지 마세요.
 
 ### `get_scholarship_history`
 
@@ -453,7 +453,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 | `period_times` | `object<string,object<string,string>>` | 필수 | 교시별 `{"2":{"start":"10:00","end":"10:50"}}` 형태의 사용자 확인 KST 시각 |
 | `exclude_dates` | `array<string>` 또는 `null` | `null` | 제외할 날짜 목록; 공휴일 자동 제외 없음 |
 
-인증·출처·캐시: ERP 로그인, `get_my_timetable`의 계정별 1800초 캐시를 이용해 로컬 생성합니다. 시간표 조회 후 입력 날짜·교시를 검사하므로 잘못된 입력도 먼저 ERP 조회를 일으킬 수 있습니다.
+인증·출처·캐시: ERP 로그인, `get_my_timetable`의 계정별 1800초 캐시를 이용해 로컬 생성합니다. 날짜·교시 시각의 형식과 범위는 시간표 조회 전에 검사합니다. 실제 시간표에 필요한 교시의 누락·불명확한 시간 표현은 조회 후 검사합니다.
 추가 검사: 실제 유효 날짜, 시작일≤종료일, **종료일−시작일≤366일**입니다. 양끝을 포함하므로 구현상 최대 367개 날짜입니다. 제외일은 기간 안이어야 합니다. 교시 키는 `1`~`99`(앞자리 0 없음), 값의 `start`·`end`는 유효한 `HH:MM`이며 같은 날 종료>시작이어야 합니다. 시간표에 쓰인 모든 교시를 제공해야 합니다.
 반환: iCalendar 문자열. 과목·요일·교시별 주간 반복 이벤트(`RRULE`)와 지정 제외일(`EXDATE`)을 UTC 시각으로 생성합니다. 이벤트에는 과목명과 강의실이 포함될 수 있습니다.
 범위: 사용자 확인 없이 학기 기간·교시 시각을 추측하지 마세요. 위 시각은 형식 예시이며 학교 공통 시간표가 아닙니다. 해석 불가 시간·빈 시간표·필수 교시 누락은 부분 내보내기 대신 오류입니다. 휴강·공휴일은 자동 반영하지 않으며 파일·공유 캘린더는 생성하지 않습니다.

@@ -145,13 +145,11 @@ _ATTENDANCE_JS = r"""
 () => {
   const t = document.querySelector('table.user_progress_table');
   if (!t) return null;
-  const rows = [];
-  t.querySelectorAll('tr').forEach(tr => {
-    const cells = Array.from(tr.querySelectorAll('th,td'))
-      .map(c => c.innerText.replace(/\s+/g, ' ').trim());
-    if (cells.some(c => c)) rows.push(cells);
-  });
-    return rows.length ? rows : null;
+  const trs = Array.from(t.rows);
+  if (trs.some(tr => Array.from(tr.cells).some(c => c.colSpan !== 1 || c.rowSpan !== 1))) return null;
+  const rows = trs.map(tr => Array.from(tr.cells)
+    .map(c => c.innerText.replace(/\s+/g, ' ').trim()));
+  return rows.length > 1 && rows.slice(1).every(row => row.some(Boolean)) ? rows : null;
 }
 """
 
@@ -355,6 +353,8 @@ async def fetch_notices(page: Page, scope: str = "all") -> list[dict]:
     ``scope`` may be ``"all"``, ``"course"`` (only course announcements) or
     ``"platform"`` (only LearnUs platform notices).
     """
+    if scope not in {"all", "course", "platform"}:
+        raise ValueError("scope는 all/course/platform입니다.")
     await _goto_korean(page, LEARNUS_HOME)
     await page.wait_for_selector(
         'a[href*="/mod/ubboard/article.php"]', timeout=15_000
@@ -434,6 +434,8 @@ async def fetch_deadlines(
     ascending (items without a due time sink to the end). Pass ``course_id`` to
     restrict the result to a single course.
     """
+    if course_id is not None and (not isinstance(course_id, str) or not re.fullmatch(r"[0-9]{1,20}", course_id)):
+        raise ValueError("course_id는 본인 강좌 목록의 숫자 ID여야 합니다.")
     if course_map is None:
         course_map = await _course_name_map(page)
     raw_events = await _read_ready_page(page, CALENDAR_UPCOMING, _CALENDAR_JS)
@@ -470,13 +472,8 @@ async def fetch_deadlines(
     return ordered
 
 
-async def fetch_notice_body(page: Page, url: str) -> dict:
-    """Return the full text body of a single notice/board article.
-
-    The MCP layer hands the body back to the LLM to summarise; we do not
-    summarise here. ``url`` must be a LearnUs board article URL as returned by
-    :func:`fetch_notices`.
-    """
+def normalize_notice_url(url: str) -> str:
+    """Allow only article identity and language; never forward action tokens."""
     try:
         parts = urlsplit(url)
         query = parse_qs(parts.query, keep_blank_values=True)
@@ -484,6 +481,7 @@ async def fetch_notice_body(page: Page, url: str) -> dict:
             parts.scheme == "https" and parts.hostname == "ys.learnus.org"
             and parts.path == "/mod/ubboard/article.php" and parts.port in (None, 443)
             and not parts.username and not parts.password
+            and set(query) <= {"id", "bwid", "lang"}
             and len(query.get("id", [])) == 1
             and re.fullmatch(r"[0-9]{1,20}", query["id"][0])
             and ("bwid" not in query or (
@@ -496,6 +494,13 @@ async def fetch_notice_body(page: Page, url: str) -> dict:
         raise ValueError(
             "url 은 fetch_notices 가 돌려준 LearnUs 게시글 주소여야 합니다."
         )
+    identity = [(key, query[key][0]) for key in ("id", "bwid") if key in query]
+    return "https://ys.learnus.org/mod/ubboard/article.php?" + urlencode([*identity, ("lang", "ko")])
+
+
+async def fetch_notice_body(page: Page, url: str) -> dict:
+    """Read an allowlisted notice URL, never a Moodle action endpoint."""
+    url = normalize_notice_url(url)
     await _goto_korean(page, url)
     try:
         await page.wait_for_function(f"() => ({_NOTICE_BODY_JS})() !== null", timeout=15_000)
@@ -525,17 +530,20 @@ async def fetch_attendance(page: Page, course_id: str) -> dict:
         page, PROGRESS_URL.format(course_id=course_id), _ATTENDANCE_JS,
         alternate_paths=("/report/ubcompletion/user_progress_a.php",),
     )
-    if not rows:
-        raise ScrapeFailedError("LearnUs 출석현황 표를 확인하지 못했습니다.")
+    if len(rows) < 2 or any(not isinstance(row, list) for row in rows):
+        raise ScrapeFailedError("LearnUs 출석현황 표의 데이터 행을 확인하지 못했습니다. 빈 출석 이력을 의미하지 않습니다.")
 
     header = rows[0]
-    weeks: list[dict] = []
-    for row in rows[1:]:
-        entry = {}
-        for i, value in enumerate(row):
-            key = header[i] if i < len(header) and header[i] else f"col{i}"
-            entry[key] = value
-        weeks.append(entry)
+    if not header or any(not isinstance(value, str) for value in header):
+        raise ScrapeFailedError("LearnUs 출석현황 표의 열 제목을 확인하지 못했습니다.")
+    # The site's normal first heading is blank. Preserve it positionally, but
+    # reject collisions with literal colN headings and duplicate real labels.
+    keys = [value.strip() or f"col{i}" for i, value in enumerate(header)]
+    if (len(set(keys)) != len(keys)
+            or any(len(row) != len(header) or any(not isinstance(value, str) for value in row)
+                   or not any(value.strip() for value in row) for row in rows[1:])):
+        raise ScrapeFailedError("LearnUs 출석현황 표의 열 제목 또는 행 구성이 손상되거나 중복되었습니다.")
+    weeks = [dict(zip(keys, row)) for row in rows[1:]]
     return {"course_id": course_id, "header": header, "weeks": weeks}
 
 

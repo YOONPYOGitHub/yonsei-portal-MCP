@@ -25,7 +25,7 @@ from urllib.parse import urlsplit
 
 from playwright.async_api import Page
 
-from ..config import ERP_URL
+from ..config import ERP_URL, ERP_PROFILE_URL, ERP_GRADES_URL, ERP_TIMETABLE_TERMS_URL, ERP_ENROLLMENT_URL
 from ..errors import ScrapeFailedError
 
 # --------------------------------------------------------------------------- #
@@ -41,6 +41,32 @@ _TIME_GROUP = r"[월화수목금토일]\s*[1-9][0-9]?(?:\s*,\s*[1-9][0-9]?)*"
 _TIME_GRAMMAR = re.compile(rf"\s*{_TIME_GROUP}(?:\s*,?\s*{_TIME_GROUP})*\s*")
 
 
+_ENDPOINT_PATHS = {
+    urlsplit(url).path.rsplit("/", 1)[-1]: urlsplit(url).path
+    for url in (ERP_PROFILE_URL, ERP_GRADES_URL, ERP_TIMETABLE_TERMS_URL, ERP_ENROLLMENT_URL)
+}
+_ENDPOINT_PATHS.update({
+    "findSchSlesHandbList.do": "/sch/sles/SlescsCtr/findSchSlesHandbList.do",
+    "findExamTimtbList.do": "/sch/sles/SlesapCtr/findExamTimtbList.do",
+    "findAtnlcHandbList.do": "/sch/sles/SlessyCtr/findAtnlcHandbList.do",
+})
+
+
+def _matches_erp_url(url: str, endpoint: Optional[str] = None) -> bool:
+    """Match an HTTPS origin and exact path (or known endpoint basename)."""
+    try:
+        parts = urlsplit(url)
+        if (parts.scheme != "https" or parts.hostname != "underwood1.yonsei.ac.kr"
+                or parts.port not in (None, 443) or parts.username or parts.password):
+            return False
+        if endpoint is None:
+            return True
+        path = _ENDPOINT_PATHS.get(endpoint, endpoint)
+        return parts.path == path if path.startswith("/") else parts.path.rsplit("/", 1)[-1] == path
+    except ValueError:
+        return False
+
+
 async def _open_menu_and_capture(
     page: Page,
     category: str,
@@ -51,7 +77,7 @@ async def _open_menu_and_capture(
 ) -> Dict[str, Any]:
     """Click ``category`` → ``leaf`` in the ERP left menu and collect JSON.
 
-    ``want`` maps a result key to a URL fragment to match. Returns a dict of the
+    ``want`` maps a result key to an exact endpoint path or basename to match. Returns a dict of the
     captured (parsed) JSON keyed by ``want``'s keys. Endpoints that fire more
     than once keep their latest payload.
     """
@@ -60,10 +86,10 @@ async def _open_menu_and_capture(
     async def on_response(resp) -> None:
         try:
             url = resp.url
-            if "underwood1.yonsei.ac.kr" not in url:
+            if not _matches_erp_url(url):
                 return
             for key, frag in want.items():
-                if frag in url:
+                if _matches_erp_url(url, frag):
                     ct = resp.headers.get("content-type", "")
                     if "json" not in ct:
                         return
@@ -76,7 +102,7 @@ async def _open_menu_and_capture(
     page.on("response", on_response)
     try:
         # ensure_authenticated() already left us on the ERP shell; make sure.
-        if "underwood1.yonsei.ac.kr" not in page.url:
+        if not _matches_erp_url(page.url):
             await page.goto(ERP_URL, wait_until="domcontentloaded")
             await page.wait_for_timeout(1_500)
 
@@ -264,7 +290,7 @@ def _parse_grades(data: Dict[str, Any], year: Optional[int] = None, term_code: O
     result = {
         "count": len(courses),
         "courses": courses,
-        "terms": term_rows,
+        "terms": [{key: row[key] for key in ("syy", "smtDivCd", "smtDivNm", "fullNm", "acqsCdt", "bwa") if key in row} for row in term_rows],
         "summary": {
             "total_earned_credits": summary.get("acqsCdt"),
             "gpa": summary.get("bwa"),
@@ -399,8 +425,7 @@ async def fetch_exam_schedule(page: Page, exam_type: str = "default") -> dict:
     if exam_type != "default" and ("중간" if exam_type == "midterm" else "기말") not in selected_exam:
         raise ScrapeFailedError("요청한 시험구분이 화면에 반영되지 않았습니다.")
     async with page.expect_response(
-        lambda response: urlsplit(response.url).hostname == "underwood1.yonsei.ac.kr"
-        and urlsplit(response.url).path == "/sch/sles/SlesapCtr/findExamTimtbList.do",
+        lambda response: _matches_erp_url(response.url, "findExamTimtbList.do"),
         timeout=20_000,
     ) as pending:
         await page.get_by_text("조회", exact=True).last.click()
@@ -477,7 +502,7 @@ async def fetch_course_catalog(page: Page, keyword: str, limit: int = 20, *, yea
     if year is not None:
         year_input = page.locator('.div_search input[role="spinbutton"]:visible')
         if await year_input.input_value() != str(year):
-            async with page.expect_response(lambda response: "findSchSlesHandbList.do" in response.url and str((response.request.post_data_json or {}).get("@d1#syy")) == str(year), timeout=20_000) as updated:
+            async with page.expect_response(lambda response: _matches_erp_url(response.url, "findSchSlesHandbList.do") and str((response.request.post_data_json or {}).get("@d1#syy")) == str(year), timeout=20_000) as updated:
                 await year_input.click()
                 await year_input.press("ControlOrMeta+A")
                 await year_input.press_sequentially(str(year))
@@ -486,7 +511,7 @@ async def fetch_course_catalog(page: Page, keyword: str, limit: int = 20, *, yea
     combos = page.locator('.div_search input[role="combobox"]:visible')
     for index, code, choices in ((0, term_code, _CATALOG_TERMS), (1, campus_code, _CATALOG_CAMPUSES)):
         if code is not None and await combos.nth(index).input_value() != choices[code]:
-            async with page.expect_response(lambda response: "findSchSlesHandbList.do" in response.url, timeout=20_000) as updated:
+            async with page.expect_response(lambda response: _matches_erp_url(response.url, "findSchSlesHandbList.do"), timeout=20_000) as updated:
                 await select_catalog_option(combos.nth(index), list(choices.values()), choices[code])
             await (await updated.value).finished()
     keyword_type = page.locator('.div_search input[role="combobox"]:visible').last
@@ -498,8 +523,7 @@ async def fetch_course_catalog(page: Page, keyword: str, limit: int = 20, *, yea
         raise ScrapeFailedError("ERP 수강편람 교과목명 검색 종류를 선택하지 못했습니다.")
     await page.locator('.div_search input:not([role]):visible').nth(1).fill(keyword)
     async with page.expect_response(
-        lambda response: urlsplit(response.url).hostname == "underwood1.yonsei.ac.kr"
-        and urlsplit(response.url).path == "/sch/sles/SlessyCtr/findAtnlcHandbList.do",
+        lambda response: _matches_erp_url(response.url, "findAtnlcHandbList.do"),
         timeout=45_000,
     ) as pending:
         await page.get_by_text("조회", exact=True).last.click()

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import re
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable, Optional, TypeVar
 
@@ -33,12 +34,14 @@ from playwright.async_api import (
     async_playwright,
 )
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Error as PlaywrightError
 
 from .config import (
     ERP_URL,
     LEARNUS_URL,
     LIBRARY_LOGIN_URL,
     LIBRARY_URL,
+    SSO_ORIGIN,
     Settings,
     load_settings,
 )
@@ -49,6 +52,16 @@ from .errors import (
     PortalError,
     ScrapeFailedError,
     SessionExpiredError,
+    UpstreamTimeoutError,
+)
+
+from .security import (
+    is_https_origin,
+    prepare_session_directory,
+    read_session_state,
+    reject_session_symlinks,
+    require_credential_form,
+    write_session_state,
 )
 
 _LOGOUT_SELECTOR = 'a[href*="/login/logout.php"]'
@@ -56,13 +69,22 @@ _SSO_TRIGGER = "a.btn-sso"
 _LIBRARY_LOGOUT_SELECTOR = 'a[href*="spLogout"]'
 # Heuristic: how long to wait for a human to finish 2FA / CAPTCHA in headed mode.
 _INTERACTIVE_LOGIN_TIMEOUT_MS = 180_000
+# Only Chromium transport failures, never certificate errors or DOM failures.
+_TRANSIENT_BROWSER_NETWORK = re.compile(
+    r"\bnet::ERR_(?:CONNECTION_(?:RESET|CLOSED|ABORTED|REFUSED|TIMED_OUT)|"
+    r"TIMED_OUT|NETWORK_CHANGED|INTERNET_DISCONNECTED|NAME_NOT_RESOLVED)\b"
+)
 
 T = TypeVar("T")
 
 
 def _account_storage(settings: Settings, system: str, filename: str):
     account = hashlib.sha256(settings.yonsei_id.encode("utf-8")).hexdigest()
-    return settings.storage_state_path.parent / account / system / filename
+    parent = settings.storage_state_path.parent
+    prepare_session_directory(parent)
+    prepare_session_directory(parent / account, dedicated=True)
+    prepare_session_directory(parent / account / system, dedicated=True)
+    return parent / account / system / filename
 
 
 class BrowserSession:
@@ -77,7 +99,7 @@ class BrowserSession:
     def __init__(self, settings: Settings, storage_state_path) -> None:
         self.settings = settings
         self._storage_state_path = storage_state_path
-        self._storage_state_path.parent.mkdir(parents=True, exist_ok=True)
+        prepare_session_directory(self._storage_state_path.parent)
         self._playwright: Optional[Playwright] = None
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
@@ -88,13 +110,14 @@ class BrowserSession:
         if self._context is not None:
             return
         try:
+            state = read_session_state(self._storage_state_path)
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(
                 headless=not self.settings.headed
             )
             context_kwargs: dict = {}
-            if self._storage_state_path.exists():
-                context_kwargs["storage_state"] = str(self._storage_state_path)
+            if state is not None:
+                context_kwargs["storage_state"] = state
             self._context = await self._browser.new_context(**context_kwargs)
         except BaseException:
             await self._close_unlocked()
@@ -131,7 +154,9 @@ class BrowserSession:
     async def _save_storage_state(self) -> None:
         if self._context is None:
             return
-        await self._context.storage_state(path=str(self._storage_state_path))
+        reject_session_symlinks(self._storage_state_path)
+        state = await self._context.storage_state()
+        write_session_state(self._storage_state_path, state)
 
     # -- authentication (site-specific hooks) --------------------------------
     async def _is_authenticated(self, page: Page) -> bool:
@@ -148,11 +173,10 @@ class BrowserSession:
     async def _invalidate_session(self) -> None:
         """Drop cached cookies so the next access performs a fresh login."""
         try:
-            if self._storage_state_path.exists():
-                self._storage_state_path.unlink()
-        except Exception:
-            pass
-        await self._close_unlocked()
+            reject_session_symlinks(self._storage_state_path)
+            self._storage_state_path.unlink(missing_ok=True)
+        finally:
+            await self._close_unlocked()
 
     # -- page access ---------------------------------------------------------
     @asynccontextmanager
@@ -177,34 +201,39 @@ class BrowserSession:
                 pass
 
     async def run(self, action: Callable[[Page], Awaitable[T]]) -> T:
-        """Run ``action`` on an authenticated page, re-logging in once on failure.
+        """Retry once only for explicit expiry, timeout or connection failures.
 
-        If the first attempt fails for a non-auth reason (timeout / stale cookies), we drop the
-        cached session and retry exactly once with a fresh login.
+        Timeouts/connections can indicate a stale browser session, so these get
+        one fresh context. Validation, parse failures and unknown exceptions do
+        not discard cookies or resubmit credentials. Auth failures never retry.
         """
         async with self._lock:
             for attempt in range(2):
                 try:
                     async with self._page_unlocked() as page:
                         return await action(page)
-                except (AuthRequiredError, AuthFailedError, MFARequiredError):
-                    raise
-                except PortalError:
+                except (SessionExpiredError, UpstreamTimeoutError):
                     if attempt == 0:
                         await self._invalidate_session()
                         continue
                     raise
-                except PlaywrightTimeoutError:
+                except (PlaywrightTimeoutError, TimeoutError, ConnectionError):
                     if attempt == 0:
                         await self._invalidate_session()
                         continue
                     raise SessionExpiredError(
                         "세션이 만료되었거나 응답이 지연되어 재시도에도 실패했습니다."
                     ) from None
-                except Exception:
-                    if attempt == 0:
-                        await self._invalidate_session()
-                        continue
+                except (ValueError, PortalError):
+                    raise
+                except Exception as exc:
+                    if isinstance(exc, PlaywrightError) and _TRANSIENT_BROWSER_NETWORK.search(str(exc)):
+                        if attempt == 0:
+                            await self._invalidate_session()
+                            continue
+                        raise SessionExpiredError(
+                            "네트워크 연결 오류로 재시도에도 실패했습니다."
+                        ) from None
                     raise ScrapeFailedError("조회 중 오류가 발생했습니다. 세션 또는 사이트 응답을 확인하세요.") from None
         raise ScrapeFailedError("알 수 없는 이유로 요청을 완료하지 못했습니다.")
 
@@ -218,7 +247,7 @@ class LearnUsSession(BrowserSession):
 
     # -- authentication ------------------------------------------------------
     async def _is_authenticated(self, page: Page) -> bool:
-        if "ys.learnus.org" not in page.url:
+        if not is_https_origin(page.url, LEARNUS_URL):
             return False
         try:
             return await page.locator(_LOGOUT_SELECTOR).count() > 0
@@ -255,8 +284,11 @@ class LearnUsSession(BrowserSession):
             raise ScrapeFailedError(
                 "연세 통합 로그인 폼(#loginId)을 제시간 내에 불러오지 못했습니다."
             ) from exc
+        await require_credential_form(page, SSO_ORIGIN, "#loginId", "#loginPasswd")
         await page.fill("#loginId", self.settings.yonsei_id)
+        await require_credential_form(page, SSO_ORIGIN, "#loginId", "#loginPasswd")
         await page.fill("#loginPasswd", self.settings.yonsei_password)
+        await require_credential_form(page, SSO_ORIGIN, "#loginId", "#loginPasswd")
         await page.evaluate("fSubmitSSOLoginForm()")
 
         # Submitting POSTs to the infra auth service which then redirects back to
@@ -264,7 +296,7 @@ class LearnUsSession(BrowserSession):
         # an intermediate hop that JS-redirects to the dashboard, so wait for the
         # round-trip and then for the logout link to actually appear.
         try:
-            await page.wait_for_url("**ys.learnus.org/**", timeout=nav_timeout)
+            await page.wait_for_url(lambda url: is_https_origin(url, LEARNUS_URL), timeout=nav_timeout)
             await page.wait_for_selector(_LOGOUT_SELECTOR, timeout=15_000)
         except PlaywrightTimeoutError:
             pass
@@ -273,7 +305,7 @@ class LearnUsSession(BrowserSession):
         if not await self._is_authenticated(page) and self.settings.headed:
             try:
                 await page.wait_for_url(
-                    "**ys.learnus.org/**",
+                    lambda url: is_https_origin(url, LEARNUS_URL),
                     timeout=_INTERACTIVE_LOGIN_TIMEOUT_MS,
                 )
             except PlaywrightTimeoutError:
@@ -326,7 +358,7 @@ class LibrarySession(BrowserSession):
         super().__init__(s, storage)
 
     async def _is_authenticated(self, page: Page) -> bool:
-        if "library.yonsei.ac.kr" not in page.url:
+        if not is_https_origin(page.url, LIBRARY_URL):
             return False
         try:
             return await page.locator(_LIBRARY_LOGOUT_SELECTOR).count() > 0
@@ -357,10 +389,13 @@ class LibrarySession(BrowserSession):
             await page.check("#sso", timeout=2_000)
         except Exception:
             pass
+        await require_credential_form(page, LIBRARY_URL, "#id", "#password")
         await page.fill("#id", self.settings.yonsei_id)
+        await require_credential_form(page, LIBRARY_URL, "#id", "#password")
         await page.fill("#password", self.settings.yonsei_password)
         # Submitting redirects back to the library home on success; the logout
         # link only exists once authenticated.
+        await require_credential_form(page, LIBRARY_URL, "#id", "#password")
         await page.click('#login input[type="submit"], #login button[type="submit"]')
         try:
             await page.wait_for_selector(
@@ -409,7 +444,7 @@ class ErpSession(BrowserSession):
         super().__init__(s, storage)
 
     async def _is_authenticated(self, page: Page) -> bool:
-        if "underwood1.yonsei.ac.kr" not in page.url:
+        if not is_https_origin(page.url, ERP_URL):
             return False
         try:
             # The SSO form means we are NOT logged in yet.
@@ -444,13 +479,16 @@ class ErpSession(BrowserSession):
             ) from exc
         if await self._is_authenticated(page):
             return
+        await require_credential_form(page, SSO_ORIGIN, "#loginId", "#loginPasswd")
         await page.fill("#loginId", self.settings.yonsei_id)
+        await require_credential_form(page, SSO_ORIGIN, "#loginId", "#loginPasswd")
         await page.fill("#loginPasswd", self.settings.yonsei_password)
+        await require_credential_form(page, SSO_ORIGIN, "#loginId", "#loginPasswd")
         await page.evaluate("fSubmitSSOLoginForm()")
 
         try:
             await page.wait_for_url(
-                "**underwood1.yonsei.ac.kr/**", timeout=nav_timeout
+                lambda url: is_https_origin(url, ERP_URL), timeout=nav_timeout
             )
             await page.get_by_text("로그아웃", exact=False).first.wait_for(
                 timeout=15_000
@@ -461,7 +499,7 @@ class ErpSession(BrowserSession):
         if not await self._is_authenticated(page) and self.settings.headed:
             try:
                 await page.wait_for_url(
-                    "**underwood1.yonsei.ac.kr/**",
+                    lambda url: is_https_origin(url, ERP_URL),
                     timeout=_INTERACTIVE_LOGIN_TIMEOUT_MS,
                 )
             except PlaywrightTimeoutError:

@@ -122,7 +122,7 @@ def korean_navigation(request, assignment_status_html):
         "fetch_courses": ({}, "", [], ""),
         "fetch_notices": ({}, "", [], ""),
         "fetch_deadlines": ({"course_map": {}}, "calendar/view.php?view=upcoming", [], ""),
-        "fetch_attendance": ({"course_id": "123"}, "report/ubcompletion/user_progress_a.php?id=123", [["Week"]], ""),
+        "fetch_attendance": ({"course_id": "123"}, "report/ubcompletion/user_progress_a.php?id=123", [["Week"], ["1"]], ""),
         "fetch_course_materials": ({"course_id": "123"}, "course/view.php?id=123", [], ""),
         "fetch_notice_body": ({"url": learnus.LEARNUS_HOME + "mod/ubboard/article.php?id=123&bwid=456&lang=en&lang=en"}, "mod/ubboard/article.php?id=123&bwid=456", {}, ""),
         "fetch_course_history": ({}, "local/ubion/user/index.php?year=all&semester=all", {"year": "all", "semester": "all", "semester_label": "전체"}, HISTORY_HTML),
@@ -286,7 +286,7 @@ async def test_course_history_new_paging_controls_fail_closed(course_history_pag
 
 @pytest.fixture(params=[
     ("fetch_deadlines", {"course_map": {}}, learnus.CALENDAR_UPCOMING, []),
-    ("fetch_attendance", {"course_id": "123"}, learnus.PROGRESS_URL.format(course_id="123"), [["Week", "Progress"]]),
+    ("fetch_attendance", {"course_id": "123"}, learnus.PROGRESS_URL.format(course_id="123"), [["Week", "Progress"], ["1", "0%"]]),
     ("fetch_course_materials", {"course_id": "123"}, learnus.COURSE_VIEW_URL.format(course_id="123"), []),
 ])
 def learnus_read(request):
@@ -389,13 +389,16 @@ async def test_learnus_reads_require_page_readiness(learnus_read):
 
 
 @pytest.mark.asyncio
-async def test_learnus_reads_accept_verified_empty_payload(learnus_read):
+async def test_learnus_reads_distinguish_empty_from_unconfirmed_attendance(learnus_read):
     fetch, arguments, page = learnus_read
+    if fetch is learnus.fetch_attendance:
+        page.evaluate.return_value = [["Week", "Progress"]]
+        with pytest.raises(ScrapeFailedError):
+            await fetch(page, **arguments)
+        return
     result = await fetch(page, **arguments)
     if fetch is learnus.fetch_deadlines:
         assert result == []
-    elif fetch is learnus.fetch_attendance:
-        assert result == {"course_id": "123", "header": ["Week", "Progress"], "weeks": []}
     else:
         assert result == {"course_id": "123", "section_count": 0, "activity_count": 0, "sections": []}
     assert page.wait_for_function.await_count == 2
@@ -429,12 +432,12 @@ async def local_learnus_dom():
     ("fetch_deadlines", {"course_map": {}}, learnus.CALENDAR_UPCOMING,
      '<main id="region-main">No events</main><script>globalThis.M = {str: {calendar: {noupcomingevents: "No events"}}}</script>', None),
     ("fetch_attendance", {"course_id": "123"}, learnus.PROGRESS_URL.format(course_id="123"),
-     '<table class="user_progress_table"><tr><th>Week</th><th>Progress</th></tr></table>', "weeks"),
+     '<table class="user_progress_table"><tr><th>Week</th><th>Progress</th></tr><tr><td>1</td><td>0%</td></tr></table>', "weeks"),
 ])
 async def test_learnus_reads_local_dom_readiness(local_learnus_dom, fetch_name, arguments, url, html, key):
     await local_learnus_dom.route(learnus._korean_url(url), lambda route: route.fulfill(status=200, content_type="text/html", body='<html lang="ko">' + html + '</html>'))
     result = await getattr(learnus, fetch_name)(local_learnus_dom, **arguments)
-    assert (result[key] if key else result) == []
+    assert (result[key] if key else result) == ([{"Week": "1", "Progress": "0%"}] if key else [])
 
 
 @pytest.mark.asyncio
@@ -527,13 +530,13 @@ async def test_learnus_calendar_dom_distinguishes_empty_from_missing(local_learn
 
 
 @pytest.mark.asyncio
-async def test_learnus_attendance_dom_distinguishes_empty_from_missing(local_learnus_dom):
+async def test_learnus_attendance_dom_requires_data_rows(local_learnus_dom):
     page = local_learnus_dom
     for html in ['<h1>Unavailable</h1>', '<table class="user_progress_table"></table>']:
         await page.set_content(html)
         assert await page.evaluate(learnus._ATTENDANCE_JS) is None
     await page.set_content('<table class="user_progress_table"><tr><th>Week</th><th>Progress</th></tr></table>')
-    assert await page.evaluate(learnus._ATTENDANCE_JS) == [["Week", "Progress"]]
+    assert await page.evaluate(learnus._ATTENDANCE_JS) is None
     await page.set_content('<table class="user_progress_table"><tr><th>Week</th><th>Progress</th></tr><tr><td>1</td><td>0%</td></tr></table>')
     assert await page.evaluate(learnus._ATTENDANCE_JS) == [["Week", "Progress"], ["1", "0%"]]
 

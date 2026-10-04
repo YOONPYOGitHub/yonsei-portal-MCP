@@ -203,7 +203,7 @@ async def test_unverified_history_inputs_are_rejected_over_stdio():
                 ):
                     result = await client.call_tool(name, arguments)
                     assert result.isError
-                    assert any("지원하지 않는 이력 조회 인자" in getattr(part, "text", "") for part in result.content)
+                    assert any("지원하지 않는 조회 인자" in getattr(part, "text", "") for part in result.content)
 
 
 @pytest.mark.asyncio

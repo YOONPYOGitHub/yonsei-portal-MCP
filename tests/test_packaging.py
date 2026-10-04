@@ -15,14 +15,15 @@ from packaging.version import Version
 def test_distribution_requires_supported_mcp_sdk():
     requirements = [Requirement(value) for value in metadata.requires("yonsei-portal-mcp") or []]
     requirement = next(item for item in requirements if item.name == "mcp")
-    assert requirement.specifier.contains("1.27.2")
+    assert requirement.specifier.contains("1.28.1")
+    assert not requirement.specifier.contains("1.27.2")
     assert not requirement.specifier.contains("2.0.0")
     assert not requirement.specifier.contains("2.2.0")
     assert not requirement.specifier.contains("1.2.0")
 
 
 def test_installed_sdk_satisfies_supported_range():
-    assert Version("1.27.2") <= Version(metadata.version("mcp")) < Version("2")
+    assert Version("1.28.1") <= Version(metadata.version("mcp")) < Version("2")
 
 
 def test_distribution_contains_modules_and_certificate(monkeypatch):

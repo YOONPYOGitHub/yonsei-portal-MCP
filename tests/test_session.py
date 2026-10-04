@@ -8,7 +8,7 @@ import pytest
 
 from yonsei_portal_mcp import session as sessions
 from yonsei_portal_mcp.config import Settings
-from yonsei_portal_mcp.errors import AuthRequiredError, ScrapeFailedError
+from yonsei_portal_mcp.errors import AuthRequiredError, SessionExpiredError
 
 
 @pytest.mark.parametrize("session_type", [sessions.LearnUsSession, sessions.LibrarySession, sessions.ErpSession])
@@ -143,8 +143,8 @@ async def test_retry_holds_session_lock_and_sanitizes_errors(browser_session, mo
     monkeypatch.setattr(browser_session, "start", start)
     monkeypatch.setattr(browser_session, "ensure_authenticated", AsyncMock())
     monkeypatch.setattr(browser_session, "_invalidate_session", invalidate)
-    action = AsyncMock(side_effect=RuntimeError("private credentials in upstream error"))
-    with pytest.raises(ScrapeFailedError) as caught:
+    action = AsyncMock(side_effect=sessions.PlaywrightTimeoutError("private credentials in upstream error"))
+    with pytest.raises(SessionExpiredError) as caught:
         await browser_session.run(action)
     assert "private credentials" not in str(caught.value)
     assert caught.value.__suppress_context__

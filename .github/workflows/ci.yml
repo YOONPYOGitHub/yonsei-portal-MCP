@@ -14,17 +14,23 @@ concurrency:
 
 jobs:
   test-and-package:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-24.04]
         python-version: ["3.10", "3.11", "3.12"]
+        include:
+          - os: macos-latest
+            python-version: "3.11"
     env:
       PYTHON_VERSION: ${{ matrix.python-version }}
       PYTHON_DOTENV_DISABLED: "1"
       RUN_LIVE_PORTAL: "0"
       RUN_LIVE_LLM: "0"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PLAYWRIGHT_SKIP_BROWSER_GC: "1"
       UV_PYTHON_DOWNLOADS: never
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -39,7 +45,7 @@ jobs:
           enable-cache: true
       - name: Install locked dependencies and Chromium
         run: |
-          uv sync --frozen --extra llm --python "$PYTHON_VERSION"
+          uv sync --frozen --extra dev --python "$PYTHON_VERSION"
           uv run --no-sync playwright install --with-deps chromium
       - name: Offline regression tests
         run: uv run --offline --no-sync python -m pytest -m "not live and not llm" -q --tb=short
@@ -60,4 +66,4 @@ jobs:
           import yonsei_portal_mcp
           assert Path(yonsei_portal_mcp.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())
           PY
-          "$RUNNER_TEMP/wheel-env/bin/python" -I -m pytest -c /dev/null -p no:cacheprovider --import-mode=importlib "$GITHUB_WORKSPACE/tests/test_packaging.py" -q --tb=short
+          "$RUNNER_TEMP/wheel-env/bin/python" -I -m pytest -c /dev/null -p no:cacheprovider --import-mode=importlib "$GITHUB_WORKSPACE/tests/test_packaging.py" "$GITHUB_WORKSPACE/tests/test_public_metadata.py" -q --tb=short

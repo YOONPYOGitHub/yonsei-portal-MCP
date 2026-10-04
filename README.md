@@ -6,6 +6,13 @@
 
 [사용 가이드·실제 캡처](docs/USAGE.md) · [질문 예시](#이렇게-물어보세요) · [전체 기능 34개](#지원-기능-전체-목록) · [설치](#빠른-시작) · [클라이언트 연결](#클라이언트-연결) · [API 참조](docs/TOOLS.md)
 
+**Unofficial, local, read-only MCP for Yonsei University.** Use only your own authorized
+account. Your MCP client supplies the LLM; this server does not need an LLM API key.
+Python 3.10+, uv and (for authenticated queries) Playwright Chromium are required.
+See [security](SECURITY.md), [contributing](CONTRIBUTING.md), and
+[license/third-party scope](THIRD_PARTY_NOTICES.md). The MIT license does not grant
+rights to university content, trademarks or personal data.
+
 > 이 프로젝트는 학교의 공식 서비스가 아닙니다. 본인에게 허용된 계정·조회 범위에서 사용하고 학교 이용 정책을 확인하세요.
 > 로그인 자격 증명은 학교 인증에 사용하며, 조회 결과는 연결한 MCP 클라이언트와 그 LLM에 전달될 수 있습니다.
 > 읽기 전용은 개인정보가 없다는 뜻이 아닙니다. 과제 제출·예약·취소·대출 연장·수강신청·결제는 지원하지 않습니다.
@@ -114,8 +121,8 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 
 ## 빠른 시작
 
-현재 소스 버전은 **0.5.0b1 공개 베타**이며 이후 [Unreleased 수정](CHANGELOG.md#unreleased)을 포함합니다. 패키지 게시와는 별개이며 아래 소스 설치로 사용할 수 있습니다.
-의존성은 `mcp>=1.27.2,<2`로 제한합니다. `uv sync --frozen`은 검증한 SDK 1.27.2를 사용하고,
+현재 소스 버전은 **0.5.0b2 공개 베타**입니다. [변경·호환성 안내](CHANGELOG.md)를 먼저 확인하세요. PyPI 게시·GitHub Release와는 별개이며 아래 소스 설치로 사용할 수 있습니다.
+의존성은 `mcp>=1.28.1,<2`로 제한합니다. `uv sync --frozen`은 SDK 1.30.0을 사용하고,
 별도 wheel 설치에서도 호환되지 않는 SDK 2.x는 선택되지 않습니다.
 
 ### 1. 실행 환경 준비
@@ -141,19 +148,32 @@ Linux 공유 라이브러리 누락 시 `playwright install-deps chromium`이 �
 ### 2. 본인 자격 증명 설정
 
 공개 조회만 사용하면 이 단계를 건너뜁니다. 로그인 조회에는 저장소 루트의 개인 `.env`에 아래 항목을 설정하세요.
-[.env.example](.env.example)은 전체 설정 예제이며 API 키 항목은 하니스용입니다. 기존 `.env`를 덮어쓰지 마세요.
+[.env.example](.env.example)은 학교 로그인·MCP 실행 설정만 담습니다. 기존 `.env`를 덮어쓰지 마세요.
+Azure/OpenAI/Anthropic/Gemini 항목은 선택적 개발용 [.env.llm.example](.env.llm.example)로 분리했습니다.
+이 별도 예제 파일은 자동 로딩되지 않으며, **일반 MCP 사용에는 해당 LLM 키가 필요 없습니다.**
 
 ```dotenv
 YONSEI_ID=<your-student-or-staff-id>
-YONSEI_PASSWORD=<your-portal-password>
 YONSEI_HEADED=true
 YONSEI_STORAGE_STATE=.session/learnus.json
+YONSEI_PASSWORD=""
 ```
 
-자리표시자는 실제 본인 값으로 바꾸되 채팅·이슈·공개 MCP 설정·셸 명령 인자에 자격 증명을 넣지 마세요.
+ID 자리표시자와 빈 비밀번호 항목은 실제 본인 값으로 채우되 채팅·이슈·공개 MCP 설정·셸 명령 인자에 자격 증명을 넣지 마세요.
 특수문자가 있는 값은 python-dotenv 문법에 맞춰 인용하세요. 로더는 ID와 비밀번호의 앞뒤 공백을 제거합니다.
 Unix에서는 `.env`를 `chmod 600 .env`로 제한하고 Windows에서는 해당 사용자만 읽도록 파일 ACL을 설정하세요.
-쿠키 디렉터리도 같은 수준으로 보호해야 하며 코드가 파일 권한을 자동 강제하는 것은 아닙니다.
+쿠키 디렉터리도 보호해야 합니다. 서버의 POSIX 쿠키 보호와 별개로 `.env` 권한은 사용자가 제한하고,
+Windows에서는 개인 사용자 ACL을 적용하세요. 쿠키는 암호화되지 않은 인증정보입니다. [보안 정책](SECURITY.md).
+
+### 기존 버전에서 업데이트할 때
+
+모든 클라이언트의 해당 MCP 프로세스를 먼저 종료한 뒤 소스를 업데이트하고 `uv sync --frozen`을 실행하세요.
+도구 이름은 유지하지만 잘못된 인자·범위·URL은 더 엄격하게 거절하므로 클라이언트의 도구 목록을 새로 불러옵니다.
+기존 쿠키가 `Session storage must be an owned private regular file` 오류로 차단되면
+본인 소유의 실제 파일인지 확인하고 해당 파일만 POSIX `0600` 권한으로 제한하세요.
+심볼릭 링크·다른 소유자·알 수 없는 파일은 읽도록 우회하지 마세요. 필요하면 본인 쿠키만 비공개 위치로
+옮긴 뒤 다시 로그인합니다. `.env`나 모든 세션을 일괄 삭제할 필요는 없습니다.
+SDK와 의존성의 보안 수정은 잠금 파일에 포함되므로 소스만 바꾸고 기존 환경을 그대로 사용하지 마세요.
 
 ### 3. 연결 전 무인증 점검
 
@@ -196,6 +216,13 @@ PowerShell 간단 점검은 Python 도구 등록만 확인하며 stdio 전송 �
 웹 주소가 표시되지 않아도 정상일 수 있습니다. 도구 인자를 셸 인자로 보내는 CLI가 아니며 아래 MCP 클라이언트로 호출합니다.
 
 ## 클라이언트 연결
+
+### 모델 설정과 MCP 서버 설정은 다릅니다
+
+일반 사용 흐름은 `질문 → 클라이언트의 LLM → MCP 조회 → 클라이언트의 LLM 답변`입니다.
+Hermes·Claude Code/Desktop·VS Code가 사용하는 모델은 해당 앱에서 설정합니다.
+서버는 `.env`의 학교 계정으로 허용된 정보를 조회할 뿐 다른 LLM을 추가 호출하지 않습니다.
+`tests/llm/`의 데모를 별도로 실행할 때만 개발용 제공자 설정과 비용이 발생할 수 있습니다.
 
 아래 예제의 `/absolute/path/to/uv`와 `/absolute/path/to/yonsei-portal-MCP`는 실제 설치 경로로 바꿉니다.
 uv 경로는 Bash의 `command -v uv`, PowerShell의 `(Get-Command uv).Source`로 확인할 수 있습니다.
@@ -254,6 +281,19 @@ WSL 설치는 VS Code Remote WSL 또는 WSL 안의 Claude Code와 사용하는 �
 
 `MCP: List Servers`에서 서버를 시작하고 도구 목록을 확인하세요. Remote WSL/SSH에서는 서버를 실행할 쪽의 워크스페이스 또는 원격 사용자 설정을 사용합니다.
 설정을 신뢰하기 전에 실행 명령을 검토하세요. [VS Code 공식 MCP 안내](https://code.visualstudio.com/docs/copilot/customization/mcp-servers).
+
+### Hermes
+
+현재 활성 프로필에 로컬 stdio 서버를 등록합니다. 경로를 자신의 환경으로 바꾸세요.
+
+```bash
+hermes mcp add yonsei-portal --command /absolute/path/to/uv --args --directory /absolute/path/to/yonsei-portal-MCP run --frozen --no-sync yonsei-portal-mcp
+hermes mcp test yonsei-portal
+```
+
+발견된 도구와 허용 범위를 확인하고, 실행 중인 앱에서 새 도구가 나타나지 않으면 해당 백엔드를 재시작합니다.
+학교 비밀번호를 Hermes 설정의 `env`나 명령 인자에 복사하지 마세요. 서버는 위 저장소의 개인 `.env`를 읽습니다.
+이름·학번·성적 등 민감한 조회는 사용자 요청 범위로 제한하세요.
 
 ## 첫 조회와 사용 흐름
 
@@ -337,6 +377,9 @@ Node.js와 패키지 다운로드가 필요한 별도 도구입니다. Inspector
 | 실제 질문·답변 캡처·결과 해석 | [docs/USAGE.md](docs/USAGE.md) |
 | 34개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
 | 개발 환경·테스트·LLM 하니스·릴리스 준비 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
+| 기여 절차·회귀 테스트·공개 PR 원칙 | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| 비밀정보 보호·취약점 비공개 신고 | [SECURITY.md](SECURITY.md) |
+| MIT 적용 범위·학교 자료·의존성 고지 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) |
 | 내부 구조·제약·미완료 작업 | [DESIGN.md](DESIGN.md) |
 | 버전별 변경과 호환성 주의사항 | [CHANGELOG.md](CHANGELOG.md) |
 

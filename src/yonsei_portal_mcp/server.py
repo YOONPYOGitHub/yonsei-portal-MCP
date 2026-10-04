@@ -11,13 +11,18 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+from functools import partial
+import os
 import re
+from types import FunctionType
 from typing import Optional
 from urllib.parse import urlsplit
 
 import anyio
+from jsonschema import Draft202012Validator
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
+from mcp.types import ToolAnnotations
 from pydantic import ValidationError
 
 from . import cache, ics
@@ -36,31 +41,44 @@ async def server_lifespan(app: FastMCP):
         cache.clear()
 
 
-_STRICT_HISTORY_TOOLS = {"get_my_loan_history", "get_my_reservation_history", "get_lms_course_history"}
-
-
 class PortalMCP(FastMCP):
+    def __init__(self, *args, **kwargs):
+        if os.environ.get("PYTHON_DOTENV_DISABLED", "").lower() not in {"1", "true", "t", "yes", "y"}:
+            super().__init__(*args, **kwargs)
+            return
+        # SDK 1.27 does not forward _env_file to its Pydantic Settings. Bind
+        # that documented setting in a private copy of the constructor's
+        # namespace: never mutate SDK globals, os.environ, or process cwd.
+        # Keep the SDK's initialization logic rather than duplicating it.
+        initialize = FastMCP.__init__
+        namespace = dict(initialize.__globals__)
+        namespace["Settings"] = partial(namespace["Settings"], _env_file=None)
+        isolated = FunctionType(initialize.__code__, namespace, initialize.__name__, initialize.__defaults__, initialize.__closure__)
+        isolated.__kwdefaults__ = initialize.__kwdefaults__
+        isolated(self, *args, **kwargs)
+
     async def list_tools(self):
         tools = await super().list_tools()
         for tool in tools:
-            if tool.name in _STRICT_HISTORY_TOOLS:
-                tool.inputSchema["additionalProperties"] = False
+            tool.inputSchema["additionalProperties"] = False
         return tools
 
     async def call_tool(self, name: str, arguments: dict):
-        if name in _STRICT_HISTORY_TOOLS:
-            schema = next(tool.inputSchema for tool in await self.list_tools() if tool.name == name)
-            if set(arguments) - set(schema.get("properties", {})):
-                raise ToolError("지원하지 않는 이력 조회 인자입니다. 현재 도구 입력 스키마를 확인하세요.")
+        schema = next((tool.inputSchema for tool in await self.list_tools() if tool.name == name), None)
+        if schema is not None and set(arguments) - set(schema.get("properties", {})):
+            raise ToolError("지원하지 않는 조회 인자입니다. 현재 도구 입력 스키마를 확인하세요.")
+        if schema is not None and not Draft202012Validator(schema).is_valid(arguments):
+            raise ToolError("조회 입력 형식이 올바르지 않습니다. 현재 도구 입력 스키마를 확인하세요.")
         try:
             return await super().call_tool(name, arguments)
         except ToolError as exc:
-            if name in _STRICT_HISTORY_TOOLS and isinstance(exc.__cause__, ValidationError):
-                raise ToolError("이력 조회 입력 형식이 올바르지 않습니다. 현재 도구 입력 스키마를 확인하세요.") from None
+            if isinstance(exc.__cause__, ValidationError):
+                raise ToolError("조회 입력 형식이 올바르지 않습니다. 현재 도구 입력 스키마를 확인하세요.") from None
             raise
 
 
 mcp = PortalMCP("yonsei-portal", lifespan=server_lifespan)
+_READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
 
 
 def _account() -> str:
@@ -70,7 +88,7 @@ def _account() -> str:
     return settings.yonsei_id or "anon"
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_courses() -> list[dict]:
     """수강 중인 LearnUs(LMS) 강좌 목록을 반환합니다.
 
@@ -86,7 +104,7 @@ async def get_lms_courses() -> list[dict]:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_deadlines(course_id: Optional[str] = None) -> list[dict]:
     """다가오는 과제/활동 마감일(LearnUs 달력의 '예정된 할 일')을 반환합니다.
 
@@ -103,6 +121,8 @@ async def get_lms_deadlines(course_id: Optional[str] = None) -> list[dict]:
     사용자에게 안내할 때 progress/completion 항목을 '과제 마감'이라고 부르지 말고
     '강의 진도/수료 마감'으로 구분해 설명하세요.
     """
+    if course_id is not None:
+        boards.validate_id(course_id)
     key = ("get_lms_deadlines", _account(), course_id)
     return await cache.cached(
         key,
@@ -113,7 +133,7 @@ async def get_lms_deadlines(course_id: Optional[str] = None) -> list[dict]:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_notices(scope: str = "all") -> list[dict]:
     """LearnUs 공지사항을 반환합니다.
 
@@ -121,7 +141,7 @@ async def get_lms_notices(scope: str = "all") -> list[dict]:
     각 항목: 유형(type), 강좌명(course), 날짜(date, YYYY-MM-DD), 제목(title), URL.
     """
     if scope not in {"all", "course", "platform"}:
-        scope = "all"
+        raise ValueError("scope는 all/course/platform입니다.")
     key = ("get_lms_notices", _account(), scope)
     return await cache.cached(
         key,
@@ -132,7 +152,7 @@ async def get_lms_notices(scope: str = "all") -> list[dict]:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def search_notices(
     query: str, scope: str = "all", limit: int = 20
 ) -> dict:
@@ -145,7 +165,9 @@ async def search_notices(
     각 결과 항목은 get_lms_notices 의 공지 딕셔너리와 동일한 키를 가집니다.
     """
     if scope not in {"all", "course", "platform"}:
-        scope = "all"
+        raise ValueError("scope는 all/course/platform입니다.")
+    if type(limit) is not int or limit < 1:
+        raise ValueError("limit은 1 이상의 정수여야 합니다.")
     terms = [t for t in query.lower().split() if t]
     notices_key = ("get_lms_notices", _account(), scope)
     notices = await cache.cached(
@@ -165,10 +187,7 @@ async def search_notices(
         return all(t in haystack for t in terms)
 
     matched = [n for n in notices if _matches(n)]
-    try:
-        limit = max(1, int(limit))
-    except (TypeError, ValueError):
-        limit = 20
+
     return {
         "query": query,
         "scope": scope,
@@ -177,7 +196,7 @@ async def search_notices(
     }
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_notice(url: str) -> dict:
     """LearnUs 또는 도서관 일반공지의 본문 텍스트를 반환합니다.
 
@@ -198,6 +217,7 @@ async def get_notice(url: str) -> dict:
         )
     if parsed.hostname != "ys.learnus.org" or parsed.path != "/mod/ubboard/article.php":
         raise ValueError("LearnUs 또는 도서관 공지 목록의 URL을 사용하세요.")
+    url = learnus.normalize_notice_url(url)
     key = ("get_notice", _account(), url)
     return await cache.cached(
         key,
@@ -208,13 +228,14 @@ async def get_notice(url: str) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_attendance(course_id: str) -> dict:
     """특정 강좌의 주차별 출석/학습 현황 표를 반환합니다.
 
     course_id 는 get_lms_courses 가 돌려준 강좌 id 입니다. 반환값은
     header(열 제목)와 weeks(주차별 행 딕셔너리 목록)를 포함합니다.
     """
+    boards.validate_id(course_id)
     key = ("get_lms_attendance", _account(), course_id)
     return await cache.cached(
         key,
@@ -224,7 +245,7 @@ async def get_lms_attendance(course_id: str) -> dict:
         ),
     )
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_course_materials(course_id: str) -> dict:
     """특정 강좌의 주차별 학습활동/자료(강의 콘텐츠) 목록을 반환합니다.
 
@@ -240,6 +261,7 @@ async def get_lms_course_materials(course_id: str) -> dict:
     포함합니다. sections 는 주차 순으로 정렬되고 강의 개요(week=null)가 맨 앞에
     옵니다.
     """
+    boards.validate_id(course_id)
     key = ("get_lms_course_materials", _account(), course_id)
     return await cache.cached(
         key,
@@ -249,7 +271,7 @@ async def get_lms_course_materials(course_id: str) -> dict:
         ),
     )
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_assignments(course_id: str) -> dict:
     """특정 LearnUs 강좌의 제출 과제 목록을 반환합니다(조회 전용).
 
@@ -258,13 +280,12 @@ async def get_lms_assignments(course_id: str) -> dict:
     각 과제는 title, url, week, section을 포함합니다. 동영상·퀴즈는 제외하며
     제출 상태나 마감시각은 이 목록에서 확인하지 않습니다. 과제 제출은 하지 않습니다.
     """
-    if not course_id.isascii() or not course_id.isdigit():
-        raise ValueError("course_id는 get_lms_courses의 숫자 강좌 ID여야 합니다.")
+    boards.validate_id(course_id)
     materials = await get_lms_course_materials(course_id)
     return learnus.assignments_from_materials(materials)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_overview() -> dict:
     """강좌 목록 + 다가오는 마감일 + 최근 강좌 공지를 한 번에 묶어 반환합니다.
 
@@ -290,7 +311,7 @@ async def get_lms_overview() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_my_loans() -> dict:
     """연세대학교 도서관에서 현재 대출 중인 도서 목록을 반환합니다.
 
@@ -307,7 +328,7 @@ async def get_my_loans() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def export_calendar_ics(
     include_loans: bool = True, course_id: Optional[str] = None
 ) -> str:
@@ -320,6 +341,8 @@ async def export_calendar_ics(
     course_id 를 주면 해당 강좌의 마감일만 포함합니다. include_loans=False 면
     도서관 로그인을 건너뛰고 LMS 마감일만 내보냅니다.
     """
+    if course_id is not None:
+        boards.validate_id(course_id)
     deadlines = await cache.cached(
         ("get_lms_deadlines", _account(), course_id),
         cache.DEADLINES_TTL,
@@ -338,7 +361,7 @@ async def export_calendar_ics(
     return ics.build_ics(deadlines, loans)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_library_seats(seat_type: Optional[str] = None) -> dict:
     """도서관 홈페이지 좌석 표와 동일한 표시값을 반환합니다(로그인 불필요, Chromium 필요).
 
@@ -353,6 +376,8 @@ async def get_library_seats(seat_type: Optional[str] = None) -> dict:
     seat_type은 general/pc/study/notebook 또는 해당 한글 유형명입니다. 60초 캐시입니다.
     열람실별 배정 상태는 get_library_seat_rooms를 사용하세요. 두 화면의 범위는 다를 수 있습니다.
     """
+    if seat_type is not None and seat_type != "" and (not isinstance(seat_type, str) or seat_type.strip().lower() not in {*seats._SEAT_TYPES, *(value.lower() for value in seats._SEAT_TYPES.values())}):
+        raise ValueError("seat_type은 general/pc/study/notebook 또는 해당 한글 유형명이어야 합니다.")
     key = ("get_library_seats", seat_type)
     return await cache.cached(
         key,
@@ -361,7 +386,7 @@ async def get_library_seats(seat_type: Optional[str] = None) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def search_library_books(query: str, page: int = 1, limit: int = 10, campus: str = "all", search_field: str = "all", offset: int = 0) -> dict:
     """연세 도서관 소장자료를 검색합니다(로그인·브라우저 불필요).
 
@@ -392,7 +417,7 @@ async def search_library_books(query: str, page: int = 1, limit: int = 10, campu
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_library_notices(limit: int = 10) -> dict:
     """도서관 일반공지 첫 페이지를 반환합니다(로그인·브라우저 불필요).
 
@@ -400,6 +425,8 @@ async def get_library_notices(limit: int = 10) -> dict:
     상단 고정 공지를 포함한 원문 순서이며 작성자 정보는 제외합니다.
     휴관·이용시간 변경 등 도서관 운영 공지를 확인할 때 사용하세요.
     """
+    if type(limit) is not int or not 1 <= limit <= 20:
+        raise ValueError("limit은 1~20의 정수여야 합니다.")
     return await cache.cached(
         ("get_library_notices", limit),
         cache.LIBRARY_NOTICES_TTL,
@@ -407,7 +434,7 @@ async def get_library_notices(limit: int = 10) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_library_seat_rooms() -> dict:
     """연세대학교 중앙도서관 **열람실별** 실시간 좌석 현황을 반환합니다(로그인 필요).
 
@@ -428,7 +455,7 @@ async def get_library_seat_rooms() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_library_facility_status(date: Optional[str] = None, building: Optional[str] = None, group: Optional[str] = None, facility: Optional[str] = None, duration_minutes: Optional[int] = None) -> dict:
     """도서관 세미나룸·시설 현황 UI의 선택 목록과 시간표를 조회합니다(로그인 필요).
 
@@ -452,7 +479,7 @@ async def get_library_facility_status(date: Optional[str] = None, building: Opti
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_student_profile(include_pii: bool = False) -> dict:
     """학사행정(ERP)에서 학생 본인의 프로필·학기 정보를 반환합니다(로그인 필요).
 
@@ -475,7 +502,7 @@ async def get_student_profile(include_pii: bool = False) -> dict:
     return visible
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_my_timetable() -> dict:
     """학사행정(ERP) 수강신청내역 기반의 본인 시간표를 반환합니다(로그인 필요).
 
@@ -495,7 +522,7 @@ async def get_my_timetable() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_grades(year: Optional[int] = None, term_code: Optional[str] = None) -> dict:
     """학사행정(ERP)에서 본인의 전체 성적 이력을 반환합니다(로그인 필요).
 
@@ -505,8 +532,10 @@ async def get_grades(year: Optional[int] = None, term_code: Optional[str] = None
     있고 note 안내가 포함됩니다(정상 동작).
     year와 term_code(10/11/20/21)로 과목·학기 목록을 필터합니다.
     summary는 항상 전체 학기 누적이며 필터된 학기의 GPA가 아닙니다.
+    terms는 syy(연도), smtDivCd(학기 코드), smtDivNm/fullNm(학기명),
+    acqsCdt(취득학점), bwa(평점) 중 원문에 있는 필드만 포함하며 개인 식별자는 제외합니다.
     """
-    if year is not None and not 1900 <= year <= datetime.now(ics.KST).year:
+    if year is not None and (type(year) is not int or not 1900 <= year <= datetime.now(ics.KST).year):
         raise ValueError("year는 1900년부터 현재 연도까지입니다.")
     if term_code is not None and term_code not in {"10", "11", "20", "21"}:
         raise ValueError("term_code는 10/11/20/21입니다.")
@@ -518,7 +547,7 @@ async def get_grades(year: Optional[int] = None, term_code: Optional[str] = None
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_my_reservations() -> dict:
     """도서관 본인의 도서 예약 내역을 조회합니다. 예약 생성·취소는 하지 않습니다.
 
@@ -532,7 +561,7 @@ async def get_my_reservations() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_scholarship_history() -> dict:
     """ERP 본인의 장학수혜내역을 읽습니다. 신청 가능한 장학금 공고가 아닙니다.
 
@@ -546,7 +575,7 @@ async def get_scholarship_history() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_exam_schedule(exam_type: str = "default") -> dict:
     """ERP 현재 학기 시험시간표를 시험구분별로 조회합니다(신청 없음).
 
@@ -564,7 +593,7 @@ async def get_exam_schedule(exam_type: str = "default") -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def search_courses(keyword: str, limit: int = 20, year: Optional[int] = None, term_code: Optional[str] = None, campus_code: Optional[str] = None) -> dict:
     """ERP 수강편람에서 교과목명으로 검색합니다. 수강신청은 수행하지 않습니다.
 
@@ -578,7 +607,7 @@ async def search_courses(keyword: str, limit: int = 20, year: Optional[int] = No
     과목이 없다고 단정할 수 없습니다. 키워드를 좁히세요. 정원·수강인원·강의계획서는 제외합니다.
     """
     keyword = keyword.strip()
-    if not 2 <= len(keyword) <= 100 or not 1 <= limit <= 50:
+    if not 2 <= len(keyword) <= 100 or type(limit) is not int or not 1 <= limit <= 50:
         raise ValueError("keyword는 2~100자, limit은 1~50이어야 합니다.")
     erp.validate_catalog_filters(year, term_code, campus_code)
     options = {key: value for key, value in {"year": year, "term_code": term_code, "campus_code": campus_code}.items() if value is not None}
@@ -588,7 +617,7 @@ async def search_courses(keyword: str, limit: int = 20, year: Optional[int] = No
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_course_history(year: Optional[int] = None, semester: str = "all") -> dict:
     """LearnUs 본인 과거강좌조회 표를 연도·학기로 조회합니다.
 
@@ -609,7 +638,7 @@ async def get_lms_course_history(year: Optional[int] = None, semester: str = "al
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_assignment_status(assignment_id: str) -> dict:
     """LearnUs 과제 한 건의 본인 제출상태·채점상태·마감을 조회합니다(제출 없음).
 
@@ -628,7 +657,7 @@ async def get_lms_assignment_status(assignment_id: str) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_my_schedule(days: int = 7, include_loans: bool = True, include_exams: bool = False) -> dict:
     """오늘(KST)부터 days일 동안의 LMS 마감·도서 반납일과 주간 시간표를 묶습니다.
 
@@ -639,7 +668,7 @@ async def get_my_schedule(days: int = 7, include_loans: bool = True, include_exa
     함께 반환하며 exams는 days로 필터하지 않은 원문 조회 범위입니다.
     개별 도구 캐시를 재사용합니다. generated_at은 묶음 생성시각이지 원천 갱신시각이 아닙니다.
     """
-    if not 1 <= days <= 90:
+    if type(days) is not int or not 1 <= days <= 90:
         raise ValueError("days는 1~90이어야 합니다.")
     deadlines = await get_lms_deadlines()
     loans = (await get_my_loans())["loans"] if include_loans else []
@@ -654,7 +683,7 @@ async def get_my_schedule(days: int = 7, include_loans: bool = True, include_exa
     return result
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_academic_calendar() -> dict:
     """연세 공식 홈페이지(신촌·국제)의 현재 표시 학기 학사일정을 조회합니다(무로그인).
 
@@ -667,7 +696,7 @@ async def get_academic_calendar() -> dict:
     return await cache.cached(("get_academic_calendar",), cache.COURSES_TTL, academic.fetch_calendar)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def export_timetable_ics(
     start_date: str, end_date: str, period_times: dict[str, dict[str, str]],
     exclude_dates: Optional[list[str]] = None,
@@ -682,11 +711,36 @@ async def export_timetable_ics(
     교시마다 주간 반복 이벤트를 생성하며 해석 불가능/누락 시간표는 부분 내보내기 대신
     오류를 반환합니다. 학사일정은 get_academic_calendar, 시간표는 get_my_timetable로 확인하세요.
     """
+    # Validate caller-supplied options before retrieving any private timetable.
+    def checked_date(value):
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+            raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다.")
+        return datetime.strptime(value, "%Y-%m-%d").date()
+
+    start, end = checked_date(start_date), checked_date(end_date)
+    if end < start or (end - start).days > 366:
+        raise ValueError("수업 기간은 시작일 이상, 최대 366일이어야 합니다.")
+    if any(not start <= checked_date(value) <= end for value in exclude_dates or []):
+        raise ValueError("제외일은 지정한 수업 기간 안에 있어야 합니다.")
+    if not isinstance(period_times, dict):
+        raise ValueError("period_times는 교시별 start/end 시각이어야 합니다.")
+    for period, times in period_times.items():
+        if (not isinstance(period, str) or not re.fullmatch(r"[1-9][0-9]?", period)
+                or not isinstance(times, dict) or set(times) != {"start", "end"}):
+            raise ValueError("교시 키는 1~99, 값은 start/end 시각이어야 합니다.")
+        parsed = []
+        for key in ("start", "end"):
+            value = times[key]
+            if not isinstance(value, str) or not re.fullmatch(r"[0-9]{2}:[0-9]{2}", value):
+                raise ValueError("교시 시각은 HH:MM 형식이어야 합니다.")
+            parsed.append(datetime.strptime(value, "%H:%M").time())
+        if parsed[1] <= parsed[0]:
+            raise ValueError("교시 종료는 같은 날의 시작 시각보다 뒤여야 합니다.")
     timetable = await get_my_timetable()
     return ics.build_timetable_ics(timetable, start_date, end_date, period_times, exclude_dates=exclude_dates)
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_gradebook(course_id: str, include_feedback: bool = False) -> dict:
     """LearnUs 강좌의 본인 성적부를 조회합니다. ERP 확정 성적/GPA와는 별개입니다.
 
@@ -705,7 +759,7 @@ async def get_lms_gradebook(course_id: str, include_feedback: bool = False) -> d
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_library_book_detail(catalog_id: str) -> dict:
     """도서관 소장자료의 복본별 상세 상태를 조회합니다(로그인·브라우저 불필요).
 
@@ -724,7 +778,7 @@ async def get_library_book_detail(catalog_id: str) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_my_loan_history() -> dict:
     """도서관 본인의 이전 대출기록 표시 페이지를 조회합니다(현재 대출은 get_my_loans).
 
@@ -742,7 +796,7 @@ async def get_my_loan_history() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_my_reservation_history() -> dict:
     """도서관 본인의 이전 도서 예약기록 표시 페이지를 조회합니다(예약 생성/취소 없음).
 
@@ -760,7 +814,7 @@ async def get_my_reservation_history() -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_boards(course_id: str) -> dict:
     """LearnUs 강좌 게시판 목록을 읽습니다. 글 작성·수정·삭제는 하지 않습니다.
 
@@ -775,7 +829,7 @@ async def get_lms_boards(course_id: str) -> dict:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=_READ_ONLY)
 async def get_lms_board_posts(board_id: str) -> dict:
     """get_lms_boards가 반환한 board_id로 강좌 게시글 목록 첫 페이지를 읽습니다.
 

@@ -6,14 +6,17 @@ is git-ignored). We never log or print the password.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv
+from .security import prepare_session_directory
 
 load_dotenv(override=False)
 
 PORTAL_URL = "https://portal.yonsei.ac.kr/"
+# Shared infra SSO used by LearnUs and the underwood1 ERP login forms.
+SSO_ORIGIN = "https://infra.yonsei.ac.kr"
 LEARNUS_URL = "https://ys.learnus.org/"
 LIBRARY_URL = "https://library.yonsei.ac.kr/"
 LIBRARY_LOGIN_URL = "https://library.yonsei.ac.kr/login"
@@ -39,8 +42,8 @@ DEFAULT_NAV_TIMEOUT_MS = 30_000
 
 @dataclass(frozen=True)
 class Settings:
-    yonsei_id: str
-    yonsei_password: str
+    yonsei_id: str = field(repr=False)
+    yonsei_password: str = field(repr=False)
     headed: bool
     storage_state_path: Path
     nav_timeout_ms: int = DEFAULT_NAV_TIMEOUT_MS
@@ -75,7 +78,7 @@ def load_settings() -> Settings:
     # System-scoped session file: LearnUs and ERP get separate
     # cookie stores. Default is .session/learnus.json; legacy override honoured.
     storage = Path(os.getenv("YONSEI_STORAGE_STATE", ".session/learnus.json"))
-    storage.parent.mkdir(parents=True, exist_ok=True)
+    prepare_session_directory(storage.parent)
     return Settings(
         yonsei_id=_read_id(),
         yonsei_password=_read_password(),
