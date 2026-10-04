@@ -135,8 +135,12 @@ def _parse_time(raw: Optional[str]) -> List[Dict[str, Any]]:
 
 
 def _parse_profile(glio: Dict[str, Any], terms: Dict[str, Any]) -> Dict[str, Any]:
-    dm = (glio or {}).get("dmGlio") or {}
-    term_rows = (terms or {}).get("dsSyySmtDivCd") or []
+    dm = glio.get("dmGlio") if isinstance(glio, dict) else None
+    term_rows = terms.get("dsSyySmtDivCd") if isinstance(terms, dict) else None
+    if not isinstance(dm, dict) or not {"deptNm", "deptTtNm", "deptCd"} <= dm.keys():
+        raise ScrapeFailedError("ERP 프로필 데이터셋의 필수 필드를 확인하지 못했습니다.")
+    if not isinstance(term_rows, list) or any(not isinstance(row, dict) or not {"code", "fullNm", "syy", "cdtTot"} <= row.keys() for row in term_rows):
+        raise ScrapeFailedError("ERP 프로필의 학기 데이터셋을 확인하지 못했습니다. 빈 이력을 의미하지 않습니다.")
     # Latest term is the highest code (e.g. 202610).
     current = None
     if term_rows:
@@ -299,9 +303,9 @@ async def fetch_student_profile(page: Page) -> Dict[str, Any]:
         "수강신청내역",
         {"glio": "findMyGLIOList.do", "terms": "findAccpsStdSchdlList.do"},
     )
-    if "glio" not in cap:
-        raise ScrapeFailedError("ERP 학생 프로필 데이터를 받아오지 못했습니다.")
-    return _parse_profile(cap.get("glio", {}), cap.get("terms", {}))
+    if not {"glio", "terms"} <= cap.keys():
+        raise ScrapeFailedError("ERP 학생 프로필·학기 응답을 모두 받아오지 못했습니다.")
+    return _parse_profile(cap["glio"], cap["terms"])
 
 
 async def fetch_timetable(page: Page) -> Dict[str, Any]:

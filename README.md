@@ -1,10 +1,10 @@
 # Yonsei Portal MCP
 
 연세대학교 LearnUs·학사행정(ERP)·도서관 정보를 MCP 클라이언트에서 조회하는 **개인용 읽기 전용 서버**입니다.
-현재 강좌, 마감, 출석, 성적, 시간표, 게시판, 도서·좌석과 학사일정을 33개 도구로 제공합니다.
-인증 조회는 Playwright Chromium, 공개 조회는 HTTP를 사용합니다. 웹 UI나 원격 HTTP MCP 서비스가 아니라 **로컬 stdio 프로세스**입니다.
+현재 강좌, 마감, 출석, 성적, 시간표, 게시판, 도서·좌석·세미나룸 현황과 학사일정을 34개 도구로 제공합니다.
+인증 조회와 홈페이지 좌석 표는 Playwright Chromium, 나머지 공개 조회는 HTTP를 사용합니다. 웹 UI나 원격 HTTP MCP 서비스가 아니라 **로컬 stdio 프로세스**입니다.
 
-[사용 가이드·실제 캡처](docs/USAGE.md) · [질문 예시](#이렇게-물어보세요) · [전체 기능 33개](#지원-기능-전체-목록) · [설치](#빠른-시작) · [클라이언트 연결](#클라이언트-연결) · [API 참조](docs/TOOLS.md)
+[사용 가이드·실제 캡처](docs/USAGE.md) · [질문 예시](#이렇게-물어보세요) · [전체 기능 34개](#지원-기능-전체-목록) · [설치](#빠른-시작) · [클라이언트 연결](#클라이언트-연결) · [API 참조](docs/TOOLS.md)
 
 > 이 프로젝트는 학교의 공식 서비스가 아닙니다. 본인에게 허용된 계정·조회 범위에서 사용하고 학교 이용 정책을 확인하세요.
 > 로그인 자격 증명은 학교 인증에 사용하며, 조회 결과는 연결한 MCP 클라이언트와 그 LLM에 전달될 수 있습니다.
@@ -20,6 +20,7 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 | --- | --- | --- | --- |
 | 책 찾기·대출 상태 확인 | 신촌 도서관에 위키드 한국어 소설이 있는지, 복본별로 대출 가능한지 확인해줘. | 불필요 | [도서 검색](docs/TOOLS.md#search_library_books) + [복본 상세](docs/TOOLS.md#get_library_book_detail) |
 | 열람실 현황 확인 | 열람실별 사용 중·표시 잔여석과 배정 가능한 방의 잔여 합계를 구분해줘. | 필요 | [열람실별 좌석](docs/TOOLS.md#get_library_seat_rooms) |
+| 세미나룸 시간표 확인 | 내일 학술정보관 세미나룸 목록을 확인하고, 선택한 시설의 30분 단위 사용 표시를 보여줘. 예약은 하지 마. | 필요 | [시설 현황](docs/TOOLS.md#get_library_facility_status) |
 | 학교 일정 확인 | 현재 공개된 학사일정에서 수강철회 기간을 찾아줘. | 불필요 | [학사일정](docs/TOOLS.md#get_academic_calendar) |
 | 학습 현황 한 번에 보기 | LearnUs의 현재 강좌, 다가오는 마감, 강좌 공지를 정리해줘. | 필요 | [학습 종합 조회](docs/TOOLS.md#get_lms_overview) |
 | 과제 제출 여부 확인 | 현재 강좌의 과제 목록을 보고 각 과제의 제출 상태와 채점 상태를 확인해줘. | 필요 | [과제 목록](docs/TOOLS.md#get_lms_assignments) + [제출상태](docs/TOOLS.md#get_lms_assignment_status) |
@@ -43,8 +44,8 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 
 ## 지원 기능 전체 목록
 
-**LearnUs 14개 · 도서관 9개 · 학사행정 6개 · 일정 4개 = 33개.** 도구 이름을 누르면 입력·반환값·제약을 볼 수 있습니다.
-`필요`는 본인 학교 계정과 Chromium이 필요하다는 뜻이며, `불필요`는 공개 HTTP 조회입니다.
+**LearnUs 14개 · 도서관 10개 · 학사행정 6개 · 일정 4개 = 34개.** 도구 이름을 누르면 입력·반환값·제약을 볼 수 있습니다.
+`필요`는 본인 학교 계정과 Chromium이 필요하다는 뜻입니다. 공개 조회는 로그인 불필요이며, 홈페이지 좌석 표는 화면 렌더링을 위해 Chromium을 사용합니다.
 
 ### LearnUs (14개)
 
@@ -67,22 +68,23 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 
 자료·영상·제출물은 다운로드하지 않습니다. LMS 점수는 ERP 성적과 별개이며, 과거강좌는 화면의 표시 범위입니다.
 
-### 도서관 (9개)
+### 도서관 (10개)
 
 | 기능 | MCP 도구 | 학교 로그인 |
 | --- | --- | --- |
 | 캠퍼스·서명·저자별 소장자료 검색, 전체 건수·연속조회 | [search_library_books](docs/TOOLS.md#search_library_books) | 불필요 |
 | 복본별 소장처·청구기호·상태·반납예정일 | [get_library_book_detail](docs/TOOLS.md#get_library_book_detail) | 불필요 |
 | 일반공지 첫 페이지 목록 | [get_library_notices](docs/TOOLS.md#get_library_notices) | 불필요 |
-| 건물군·유형별 공개 원문 수치 (**사용·잔여 의미 미확인**) | [get_library_seats](docs/TOOLS.md#get_library_seats) | 불필요 |
+| 홈페이지 전체·사용·잔여석 표의 표시값 (Chromium 필요) | [get_library_seats](docs/TOOLS.md#get_library_seats) | 불필요 |
 | 열람실별 좌석·운영시간·배정 가능 여부 | [get_library_seat_rooms](docs/TOOLS.md#get_library_seat_rooms) | 필요 |
+| 날짜·도서관·그룹·시설·사용시간별 선택 목록과 시간표 | [get_library_facility_status](docs/TOOLS.md#get_library_facility_status) | 필요 |
 | 내 대출 도서·반납예정일 | [get_my_loans](docs/TOOLS.md#get_my_loans) | 필요 |
 | 내 현재 도서 예약·순위·상태 | [get_my_reservations](docs/TOOLS.md#get_my_reservations) | 필요 |
 | 내 대출 이력의 기본 표시 결과 | [get_my_loan_history](docs/TOOLS.md#get_my_loan_history) | 필요 |
 | 내 이전 도서 예약 이력의 기본 표시 결과 | [get_my_reservation_history](docs/TOOLS.md#get_my_reservation_history) | 필요 |
 
 검색 자료 수와 실제 복본 수는 다릅니다. 개인 이력의 날짜·페이지 지정, 예약 생성·취소·대출 연장은 지원하지 않습니다.
-공개 좌석은 원문 표시의 의미 충돌 때문에 `in_use`·`remaining`·`usage_pct`를 `null`로 반환합니다. 잔여석 확인에는 로그인 열람실 도구를 사용하세요. **세미나룸 시간대별 예약 가능 여부·개인 시설 예약내역은 미지원**입니다.
+공개 좌석은 홈페이지의 셀 값을 그대로 반환합니다. `display_verified=true`는 화면과의 일치를 뜻하며, `source_totals_match=false`는 화면 자체의 합계 모순입니다. 이용률은 화면에 없어 `null`입니다. 세미나룸은 시간대별 사용 표시를 읽지만 예약 확정·개인 시설 예약내역 조회·예약 생성/취소는 수행하지 않습니다.
 
 ### 학사행정 ERP (6개)
 
@@ -121,7 +123,7 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 - Python **3.10 이상**: Linux/WSL의 3.10·3.11·3.12에서 오프라인 회귀와 wheel 설치를 검증했습니다. 실제 포털 검증은 3.12 중심이며 다른 OS/버전 전체 검증은 아닙니다.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)와 Git.
 - 로그인 조회: 유효한 본인 계정, Chromium, 필요시 브라우저 창을 표시할 데스크톱 환경.
-- 공개 조회만 사용: 학교 자격 증명과 Chromium 설치 생략 가능.
+- 도서 검색·공지·학사일정만 사용: 학교 자격 증명과 Chromium 설치 생략 가능. 공개 홈페이지 좌석 표는 로그인 없이 Chromium이 필요합니다.
 
 Linux/macOS/WSL Bash 및 Windows PowerShell에서:
 
@@ -129,7 +131,7 @@ Linux/macOS/WSL Bash 및 Windows PowerShell에서:
 git clone https://github.com/YOONPYOGitHub/yonsei-portal-MCP.git
 cd yonsei-portal-MCP
 uv sync --frozen
-# 로그인 도구를 사용할 때 설치
+# 로그인 도구 또는 홈페이지 좌석 조회를 사용할 때 설치
 uv run --frozen playwright install chromium
 ```
 
@@ -156,7 +158,7 @@ Unix에서는 `.env`를 `chmod 600 .env`로 제한하고 Windows에서는 해당
 ### 3. 연결 전 무인증 점검
 
 저장소 루트에서 아래 명령을 실행하면 서버를 시작해 도구 목록만 읽습니다. 학교·외부 LLM 호출이나 브라우저 기동은 하지 않습니다.
-정상 출력은 `33 tools available`입니다. 설치 이후 추가 네트워크 동기화를 하지 않도록 `--no-sync`를 사용합니다.
+정상 출력은 `34 tools available`입니다. 설치 이후 추가 네트워크 동기화를 하지 않도록 `--no-sync`를 사용합니다.
 
 ```bash
 uv run --no-sync python - <<'PY'
@@ -174,7 +176,7 @@ async def check():
             async with ClientSession(*streams) as client:
                 await client.initialize()
                 tools = (await client.list_tools()).tools
-                assert len(tools) == 33
+                assert len(tools) == 34
                 print(f"{len(tools)} tools available")
 
 asyncio.run(asyncio.wait_for(check(), timeout=30))
@@ -265,7 +267,7 @@ WSL 설치는 VS Code Remote WSL 또는 WSL 안의 Claude Code와 사용하는 �
 
 VS Code용 프리셋 7개는 [.github/prompts](.github/prompts)에 있습니다:
 `/오늘할일`, `/이번주마감`, `/내시간표`, `/내성적`, `/공지검색`, `/빈자리`, `/일정내보내기`.
-`/빈자리`는 도서관 로그인 후 열람실별 표시 현황을 사용하며, 의미 미확인 공개 수치를 잔여석으로 대신 계산하지 않습니다.
+`/빈자리`는 열람실·홈페이지 좌석·세미나룸 중 요청한 화면을 구분합니다. 홈페이지 표시값과 로그인 열람실 합계를 합치거나 시간표의 무표시 구간을 예약 확정으로 안내하지 않습니다.
 `/이번주마감`은 오늘부터 7일 구간이며 월요일~일요일 달력 주간이 아닙니다. 다른 클라이언트에 자동 등록되는 MCP prompt 기능은 아닙니다.
 
 ## 설정과 세션
@@ -299,7 +301,7 @@ VS Code용 프리셋 7개는 [.github/prompts](.github/prompts)에 있습니다:
 - 반환 결과·ICS·원시 로그·스크린샷·쿠키를 공개 이슈나 저장소에 첨부하지 마세요. SDK/예외 처리의 일부 비식별화가 모든 출력에서 개인정보가 제거됨을 보장하지 않습니다.
 - 개인 이력은 기본 표시 범위입니다. 도서관 날짜·페이지 입력은 미지원이며 `count=0`을 전체 과거 이력 없음으로 단정할 수 없습니다.
 - 정상 빈 응답과 조회 실패를 구분합니다. `isError=true`, 파싱 실패, 인증 실패를 0건·0점·0석으로 요약하지 마세요.
-- 공개 좌석의 사용·잔여 의미는 미확인입니다. 지원하지 않는 좌석 필터는 오류이며, 강좌/공지 자체가 없는 화면도 조회 오류가 날 수 있습니다. 지원 인자는 [도구 참조](docs/TOOLS.md)를 따르세요.
+- 공개 좌석은 API 키가 아니라 홈페이지 표시값을 제공합니다. 화면 자체의 합계 모순과 실제 착석 가능 여부는 별개입니다. 지원하지 않는 필터와 미확인 화면은 오류이며 임의의 빈 결과로 바꾸지 않습니다. 지원 인자는 [도구 참조](docs/TOOLS.md)를 따르세요.
 - MIT 라이선스는 이 소스 코드에 적용됩니다. 학교 공지·강의자료·학생 데이터의 재배포 권한까지 부여하지 않습니다. [LICENSE](LICENSE).
 
 ## 문제 해결
@@ -333,7 +335,7 @@ Node.js와 패키지 다운로드가 필요한 별도 도구입니다. Inspector
 | 필요한 내용 | 문서 |
 | --- | --- |
 | 실제 질문·답변 캡처·결과 해석 | [docs/USAGE.md](docs/USAGE.md) |
-| 33개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
+| 34개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
 | 개발 환경·테스트·LLM 하니스·릴리스 준비 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 | 내부 구조·제약·미완료 작업 | [DESIGN.md](DESIGN.md) |
 | 버전별 변경과 호환성 주의사항 | [CHANGELOG.md](CHANGELOG.md) |

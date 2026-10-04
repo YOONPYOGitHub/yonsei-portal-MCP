@@ -771,8 +771,68 @@ async def test_public_tools_cache_without_login(monkeypatch, tool_name, fetch_na
         cache.clear()
 
 
+@pytest.mark.parametrize("glio,terms", [
+    ({}, {"dsSyySmtDivCd": []}),
+    ({"dmGlio": None}, {"dsSyySmtDivCd": []}),
+    ({"dmGlio": {"deptNm": "Synthetic", "deptTtNm": "Synthetic", "deptCd": "D"}}, {}),
+    ({"dmGlio": {"deptNm": "Synthetic", "deptTtNm": "Synthetic", "deptCd": "D"}}, {"dsSyySmtDivCd": [{}]}),
+])
+def test_profile_rejects_partial_response_instead_of_fabricating_empty_terms(glio, terms):
+    with pytest.raises(ScrapeFailedError):
+        erp._parse_profile(glio, terms)
+
+
+def test_profile_preserves_explicit_empty_terms():
+    result = erp._parse_profile({"dmGlio": {"deptNm": "Synthetic", "deptTtNm": "Synthetic", "deptCd": "D"}}, {"dsSyySmtDivCd": []})
+    assert result["terms"] == [] and result["current_term"] is None
+
+
 def _public_seat_payload():
     return {f"{building}_{kind}_{field}": 0 for building in ("center", "yonsei") for kind in ("general", "pc", "study", "notebook") for field in ("total", "use")}
+
+
+def _displayed_seat_tables():
+    return [
+        {"headers": ["열람실", "전체", "사용", "잔여석"], "rows": [
+            {"building": "중앙", "kind": "일반좌석", "cells": ["1,290", "140", "1150"]},
+            {"building": "중앙", "kind": "노트북좌석", "cells": ["0", "0", "0"]},
+            {"building": "중앙", "kind": "PC좌석", "cells": ["0", "0", "0"]},
+            {"building": "중앙", "kind": "그룹스터디룸", "cells": ["51", "48", "0"]},
+        ]},
+        {"headers": ["열람실", "전체", "사용", "잔여석"], "rows": [
+            {"building": "학술", "kind": "일반좌석", "cells": ["854", "425", "429"]},
+            {"building": "학술", "kind": "노트북좌석", "cells": ["81", "10", "71"]},
+            {"building": "학술", "kind": "PC좌석", "cells": ["931", "72", "859"]},
+            {"building": "학술", "kind": "그룹스터디룸", "cells": ["41", "22", "19"]},
+        ]},
+    ]
+
+
+def test_public_seat_display_uses_labels_and_preserves_zero_and_inconsistency():
+    result = seats.parse_displayed_seats(_displayed_seat_tables())
+    assert result["scope"] == "homepage_display" and result["display_verified"] is True
+    assert result["semantics_verified"] is False
+    assert len(result["rows"]) == 8
+    pc = next(row for row in result["rows"] if row["building_code"] == "yonsei" and row["seat_type_code"] == "pc")
+    assert (pc["total"], pc["in_use"], pc["remaining"]) == (931, 72, 859)
+    assert pc["building_label_raw"] == "학술" and pc["seat_type_label_raw"] == "PC좌석"
+    central_study = result["rows"][3]
+    assert (central_study["total"], central_study["in_use"], central_study["remaining"]) == (51, 48, 0)
+    assert central_study["source_totals_match"] is False
+    assert result["source_totals_match"] is False
+    assert result["total"] == sum(row["total"] for row in result["rows"])
+    assert result["totals_scope"] == "sum_of_displayed_rows"
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda tables: [],
+    lambda tables: [{**tables[0], "headers": ["열람실", "전체", "다름", "잔여석"]}],
+    lambda tables: [{**tables[0], "rows": [{"building": "학술", "kind": "PC좌석", "cells": ["931", "-", "859"]}]}],
+    lambda tables: [tables[0], tables[0]],
+])
+def test_public_seat_display_rejects_missing_ambiguous_or_unready_table(mutation):
+    with pytest.raises(ScrapeFailedError):
+        seats.parse_displayed_seats(mutation(_displayed_seat_tables()))
 
 
 @pytest.mark.parametrize("payload", [{}, None, {"error": "service unavailable"}])
@@ -802,28 +862,31 @@ def test_public_seats_preserve_raw_zero_without_claiming_availability() -> None:
     assert result["rows"][0]["remaining"] is None
 
 
-@pytest.mark.parametrize("has_rows", [False, True])
-def test_public_seat_smoke_accepts_unknown_occupancy(has_rows):
+@pytest.mark.parametrize("has_counts", [False, True])
+def test_public_seat_smoke_accepts_displayed_values(has_counts):
     from tests.smoke_seats import _check_shape
 
-    payload = _public_seat_payload()
-    if has_rows:
-        payload.update(yonsei_pc_total=931, yonsei_pc_use=849)
-    result = seats._parse(payload)
+    tables = _displayed_seat_tables()
+    if not has_counts:
+        for table in tables:
+            for row in table["rows"]:
+                row["cells"] = ["0", "0", "0"]
+    result = seats.parse_displayed_seats(tables)
     _check_shape(result)
     with pytest.raises(AssertionError):
-        _check_shape({**result, "remaining": 0})
+        _check_shape({**result, "remaining": None})
 
 
 @pytest.mark.asyncio
-async def test_public_seats_filtered_values_remain_unverified(monkeypatch):
-    payload = _public_seat_payload()
-    payload.update(yonsei_pc_total=931, yonsei_pc_use=849)
-    monkeypatch.setattr(httpclient, "get_json", AsyncMock(return_value=payload))
+async def test_public_seats_filtered_values_match_displayed_columns(monkeypatch):
+    fetch = AsyncMock(return_value=_displayed_seat_tables())
+    monkeypatch.setattr(seats, "_fetch_displayed_tables", fetch)
     result = await seats.fetch_seats("pc")
-    assert result["raw_use"] == 849 and result["raw_total_minus_use"] == 82
-    assert result["in_use"] is None and result["remaining"] is None
-    assert result["semantics_verified"] is False and result["availability_note"]
+    assert len(result["rows"]) == 2
+    assert (result["total"], result["in_use"], result["remaining"]) == (931, 72, 859)
+    assert result["display_verified"] is True and result["availability_note"]
+    assert result["source_url"] == "https://library.yonsei.ac.kr/"
+    fetch.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio

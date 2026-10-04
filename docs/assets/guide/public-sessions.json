@@ -5,7 +5,7 @@
   "model_note": "Configured deployment; exact model revision is not exposed by the agent result",
   "server_version": "0.5.0b1",
   "credentials_sent_to_mcp": false,
-  "current_contract_note": "Archived 2026-09-30 responses, not current API examples. The seats answer failed later semantic verification: API use and homepage occupied/remaining columns conflict. Current get_library_seats returns semantics_verified=false and null in_use/remaining/usage_pct. Do not interpret the archived 920/11 values as verified occupancy or availability. Original questions, answers and tool responses are preserved unchanged.",
+  "current_contract_note": "Archived 2026-09-30 responses, not current API examples. The seats answer failed later semantic verification: API use and homepage columns conflict. The current implementation reads actual homepage cells using anonymous Chromium, returns display_verified=true and scope=homepage_display, and preserves inconsistent displayed totals. Physical availability is not guaranteed. Do not interpret archived 920/11 values as verified occupancy. Original questions, answers and tool responses are preserved unchanged.",
   "capture_note": "Two earlier all-edition book queries produced a publication-year grouping error and a copy-count error (22 claimed, 23 in tool data). The guide uses a narrower single-edition question. The selected answers are unedited; this is not a reliability benchmark.",
   "examples": [
     {

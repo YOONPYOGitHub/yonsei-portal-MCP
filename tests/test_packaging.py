@@ -27,7 +27,7 @@ def test_installed_sdk_satisfies_supported_range():
 
 def test_distribution_contains_modules_and_certificate(monkeypatch):
     monkeypatch.setenv("PYTHON_DOTENV_DISABLED", "1")
-    for module in ("academic", "boards", "erp", "learnus", "library", "seats"):
+    for module in ("academic", "boards", "erp", "facilities", "learnus", "library", "seats"):
         importlib.import_module(f"yonsei_portal_mcp.scrapers.{module}")
     certificate = resources.files("yonsei_portal_mcp").joinpath("_certs", "sectigo_ov_intermediate.pem")
     assert certificate.is_file()
@@ -58,7 +58,7 @@ async def test_distribution_starts_stdio_without_credentials(tmp_path):
                 async with ClientSession(*streams) as session:
                     await session.initialize()
                     tools = (await session.list_tools()).tools
-                    assert len(tools) == len({tool.name for tool in tools}) == 33
+                    assert len(tools) == len({tool.name for tool in tools}) == 34
                     search = next(tool for tool in tools if tool.name == "search_library_books")
                     assert set(search.inputSchema["properties"]) == {"query", "page", "limit", "campus", "search_field", "offset"}
                     history = next(tool for tool in tools if tool.name == "get_my_loan_history")

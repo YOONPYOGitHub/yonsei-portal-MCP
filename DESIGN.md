@@ -7,7 +7,7 @@
 
 개인용 **읽기 전용 stdio MCP 서버**입니다. 로그인과 조회용 검색 외에 예약·취소·연장·신청·제출·결제를 실행하지 않습니다.
 UI, 다중 사용자 서비스, 쓰기 도구는 현재 범위가 아닙니다.
-공개 도구는 LearnUs 14개, 도서관 9개, ERP 6개, 일정 4개로 총 33개입니다.
+공개 도구는 LearnUs 14개, 도서관 10개, ERP 6개, 일정 4개로 총 34개입니다.
 내부 함수·실험 코드·포털 메뉴의 존재를 공개 지원으로 취급하지 않습니다.
 
 ## 2. 구현 구조
@@ -18,10 +18,11 @@ flowchart LR
     Server --> Cache[프로세스 내 TTL 캐시]
     Cache --> Sessions[시스템별 BrowserSession]
     Cache --> HTTP[httpx 공개 조회]
+    Cache --> Anonymous[익명 Chromium / 홈페이지 좌석 표]
     Sessions --> LMS[LearnUs / Moodle]
     Sessions --> ERP[ERP / cpr eXBuilder]
     Sessions --> Library[도서관 / 열람실]
-    HTTP --> Public[공개 검색 / 복본 / 공지 / 좌석 / 학사일정]
+    HTTP --> Public[공개 검색 / 복본 / 공지 / 학사일정]
     Sessions --> Cookies[로컬 계정별·시스템별 쿠키 파일]
 ```
 
@@ -36,7 +37,8 @@ flowchart LR
 | [src/yonsei_portal_mcp/scrapers/boards.py](src/yonsei_portal_mcp/scrapers/boards.py) | 강좌 게시판·글 목록, 작성자·숨김/링크 없는 제목 제외 |
 | [src/yonsei_portal_mcp/scrapers/library.py](src/yonsei_portal_mcp/scrapers/library.py) | 도서·공지·개인 대출/예약/이력·열람실 |
 | [src/yonsei_portal_mcp/scrapers/erp.py](src/yonsei_portal_mcp/scrapers/erp.py) | 메뉴 조작 후 조회 JSON 캡처·정규화 |
-| [src/yonsei_portal_mcp/scrapers/seats.py](src/yonsei_portal_mcp/scrapers/seats.py) | 공개 좌석 JSON 집계 |
+| [src/yonsei_portal_mcp/scrapers/seats.py](src/yonsei_portal_mcp/scrapers/seats.py) | 익명 브라우저의 실제 홈페이지 좌석 표·표시 모순 검증 |
+| [src/yonsei_portal_mcp/scrapers/facilities.py](src/yonsei_portal_mcp/scrapers/facilities.py) | 도서관 SSO 시설 선택 UI·시간표 표시 조회, 변경 요청 차단 |
 | [src/yonsei_portal_mcp/scrapers/academic.py](src/yonsei_portal_mcp/scrapers/academic.py) | 공개 학사일정의 월별 원문 날짜·제목 |
 | [src/yonsei_portal_mcp/ics.py](src/yonsei_portal_mcp/ics.py) | 일정 합성·마감 ICS·명시적 입력 기반 반복 ICS |
 
@@ -52,7 +54,8 @@ ERP 화면은 cpr/eXBuilder의 `.clx.js` 기반입니다.
 - 필터는 요청 전송뿐 아니라 선택된 조건과 응답 행을 검증합니다. 세 이력 도구는 지원하지 않는 추가 인자를 SDK 처리 전에 거절합니다.
 - 원문 전체 건수·출력 제한·로컬 잘림·후속 페이지를 구분합니다. 페이지 사이 변경 가능성이 있으므로 ID 중복과 수집 건수를 대조해야 합니다.
 - 달력의 진도/수료와 제출 과제, LMS 점수와 ERP 성적, 자료 건수와 복본 수, 좌석 잔여와 배정 가능을 구분합니다.
-- 공개 좌석 API는 홈페이지 사용/잔여 표시와 의미가 충돌합니다. 원문 값만 보존하고 `semantics_verified=false`, 사용·잔여·이용률은 `null`로 반환합니다. 로그인 열람실 표와 합치거나 세미나룸 예약 가능 수치로 해석하지 않습니다.
+- 공개 좌석은 무로그인 Chromium으로 실제 홈페이지 표를 읽습니다. API 키 해석 대신 화면 전체/사용/잔여 값을 보존하고 합계 모순을 표시합니다. `display_verified`는 화면 일치이며 실제 착석 보장은 아닙니다.
+- 시설 현황은 도서관 SSO 후 444번 포트 UI의 날짜·건물·그룹·시설·사용시간 선택을 대조합니다. 시간대 클릭·예약 제출을 하지 않고 시간표 표시만 반환하며, 인증 이후 시설 서버의 변경 요청은 차단합니다.
 - 공지의 이미지 수와 이미지 내용 미추출 안내를 반환합니다. LearnUs 이미지 전용 본문은 텍스트가 비어도 유효하지만, 본문 구조가 없거나 콘텐츠가 준비되지 않은 화면은 오류입니다.
 - LearnUs는 `lang=ko`와 실제 DOM 언어·대상 ID를 검증합니다. ERP 성적의 `dsSgra100`은 과목, `dsSgra120`은 학기 데이터입니다.
 - 개인정보 옵션은 기본 최소화하되 도구 응답 전체가 비식별화됐다고 가정하지 않습니다. 게시판 목록의 본문 제외는 다른 도구 호출을 차단하는 권한 장치가 아닙니다.
@@ -104,7 +107,7 @@ ERP 화면은 cpr/eXBuilder의 `.clx.js` 기반입니다.
 | 장학 공고·마감 통합 | 원문 소스와 날짜·중복 계약 필요. 장학수혜내역과 별개 |
 | 게시판 본문·후속 페이지 | 목록만 지원. 접근 가능한 글·페이지 표본과 개인정보·첨부 범위 확인 필요 |
 | 공식 교시·학기 연결 | 사용자 입력만 지원. 캠퍼스·과정별 근거와 휴강/휴일 처리 기준 필요 |
-| 추가 조회·출력 지역화 | 지도교수 공지·강의평가·본인 시설 예약·메일·졸업요건은 접근/표본 미확인. 출력 번역은 미구현 |
+| 추가 조회·출력 지역화 | 지도교수 공지·강의평가·본인 시설 예약내역·메일·졸업요건은 접근/표본 미확인. 시설 현황 시간표는 구현했으나 개인 예약내역과 별개. 출력 번역은 미구현 |
 | 운영 안정성 | 중복 요청 합치기·캐시 크기·호출 간격·오류 통일·비밀 저장 보강 필요 |
 | 지원 환경 확대 | Ubuntu/Python 3.10·3.11·3.12 CI 구성. Windows/macOS 및 다양한 계정의 실접속 검증은 남아 있음. [릴리스 체크리스트](docs/DEVELOPMENT.md) 참고 |
 

@@ -22,7 +22,7 @@ from pydantic import ValidationError
 
 from . import cache, ics
 from .config import load_settings
-from .scrapers import academic, boards, erp, learnus, library, seats
+from .scrapers import academic, boards, erp, facilities, learnus, library, seats
 from .session import close_sessions, get_erp_session, get_library_session, get_session, validate_session_settings
 
 
@@ -340,16 +340,18 @@ async def export_calendar_ics(
 
 @mcp.tool()
 async def get_library_seats(seat_type: Optional[str] = None) -> dict:
-    """도서관 공개 좌석 API의 원문 수치를 반환합니다(로그인 불필요, 의미 미검증).
+    """도서관 홈페이지 좌석 표와 동일한 표시값을 반환합니다(로그인 불필요, Chromium 필요).
 
-    API의 use와 홈페이지 사용/잔여 칸이 충돌하므로 semantics_verified=false이며,
-    in_use/remaining/usage_pct는 null입니다. raw_use와 raw_total_minus_use를
-    사용중이나 잔여석으로 바꾸어 답하거나 가용 좌석을 추측하지 마세요.
-    rows에는 building/building_code, seat_type/seat_type_code, 원문 total과 raw 값이
-    있습니다. 최상위에도 같은 합계·미확인 상태, scope, source_url, fetched_at,
-    availability_note가 있습니다. total도 공개 API 범위의 값이지 전체 열람실 수용력 보증이 아닙니다.
+    rows의 total/in_use/remaining은 홈페이지의 전체/사용/잔여석 셀 그대로입니다.
+    0인 행도 보존하며 building_label_raw/seat_type_label_raw는 화면 이름입니다.
+    display_verified=true, scope=homepage_display입니다. API 키 의미를 추측해 값을 뒤집지 않습니다.
+    source_totals_match=false인 행은 홈페이지 자체가 전체=사용+잔여와 맞지 않으므로
+    그 모순을 사용자에게 알리고 임의로 수정하지 마세요. 최상위 합계는 표시 행 합산
+    (totals_scope=sum_of_displayed_rows)이지 학교가 발표한 별도 전체 합계가 아닙니다.
+    usage_pct는 화면에 없어 null, semantics_verified=false는 실제 점유·예약 가능성의 보증이
+    아님을 뜻합니다. 화면값으로 안내하되 실제 좌석 확보를 보장하지 마세요. source_url/fetched_at 포함.
     seat_type은 general/pc/study/notebook 또는 해당 한글 유형명입니다. 60초 캐시입니다.
-    열람실별 사용·잔여·배정 상태가 필요하면 로그인 도구 get_library_seat_rooms를 사용하세요.
+    열람실별 배정 상태는 get_library_seat_rooms를 사용하세요. 두 화면의 범위는 다를 수 있습니다.
     """
     key = ("get_library_seats", seat_type)
     return await cache.cached(
@@ -423,6 +425,30 @@ async def get_library_seat_rooms() -> dict:
         key,
         cache.LIBRARY_SEAT_ROOMS_TTL,
         lambda: get_library_session().run(library.fetch_seat_rooms),
+    )
+
+
+@mcp.tool()
+async def get_library_facility_status(date: Optional[str] = None, building: Optional[str] = None, group: Optional[str] = None, facility: Optional[str] = None, duration_minutes: Optional[int] = None) -> dict:
+    """도서관 세미나룸·시설 현황 UI의 선택 목록과 시간표를 조회합니다(로그인 필요).
+
+    인자 없이 호출하면 오늘 기준 조회 가능 날짜·도서관 목록을 반환합니다.
+    date는 YYYY-MM-DD이며 웹 화면에 표시된 날짜만 지원합니다.
+    building은 학술정보관/중앙도서관, group/facility는 앞선 options의 이름을 그대로 사용하세요.
+    building → group → facility → duration_minutes 순서로 입력하며 각 단계까지의 options를 반환합니다.
+    duration_minutes는 시설 화면에 표시된 사용시간 중 분 단위 정수입니다.
+    모든 조건을 선택하면 time_slots(start/end/used_mark/display_status)를 반환합니다.
+    used_mark는 화면의 사용 표시이고 표시 없는 구간도 예약 확정·이용 자격 보장은 아닙니다.
+    time_slots=null은 시간표 미선택이며 0건이나 예약 불가로 단정하지 마세요.
+    선택 불가 시설은 unavailable_selection과 selection_applied=false로 반환합니다.
+    selected, requested_filters, display_verified, source_url, fetched_at을 함께 확인하세요.
+    예약자·참여자 정보는 제외하고 시간대 클릭·예약·취소는 수행하지 않습니다. 조건별 60초 캐시입니다.
+    """
+    facilities.validate_filters(date, building, group, facility, duration_minutes)
+    return await cache.cached(
+        ("get_library_facility_status", _account(), date, building, group, facility, duration_minutes),
+        cache.LIBRARY_SEAT_ROOMS_TTL,
+        lambda: get_library_session().run(lambda page: facilities.fetch_facility_status(page, date, building, group, facility, duration_minutes)),
     )
 
 

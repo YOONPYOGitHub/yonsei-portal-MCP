@@ -1,4 +1,4 @@
-"""Smoke test for the no-login library seat tool (httpx path, no browser).
+"""Smoke test for the anonymous homepage seat tool (Chromium required).
 
 Run: ``uv run python tests/smoke_seats.py``
 """
@@ -15,11 +15,11 @@ def _check_shape(result: dict) -> None:
     assert isinstance(result, dict), "result must be a dict"
     assert isinstance(result["rows"], list)
     assert result["semantics_verified"] is False
-    assert result["scope"] == "public_widget_api"
+    assert result["display_verified"] is True
+    assert result["scope"] == "homepage_display"
     for item in [result, *result["rows"]]:
-        assert all(item[key] is None for key in ("in_use", "remaining", "usage_pct"))
-        assert all(type(item[key]) is int and item[key] >= 0 for key in ("total", "raw_use", "raw_total_minus_use"))
-        assert item["total"] == item["raw_use"] + item["raw_total_minus_use"]
+        assert item["usage_pct"] is None
+        assert all(type(item[key]) is int and item[key] >= 0 for key in ("total", "in_use", "remaining"))
     for row in result["rows"]:
         for field in (
             "building",
@@ -28,7 +28,9 @@ def _check_shape(result: dict) -> None:
             "seat_type_code",
         ):
             assert field in row, f"row missing key: {field}"
-    for field in ("total", "raw_use", "raw_total_minus_use"):
+        assert row["source_totals_match"] == (row["total"] == row["in_use"] + row["remaining"])
+    assert result["source_totals_match"] == all(row["source_totals_match"] for row in result["rows"])
+    for field in ("total", "in_use", "remaining"):
         assert result[field] == sum(row[field] for row in result["rows"])
 
 
@@ -37,13 +39,13 @@ async def main() -> None:
     _check_shape(result)
     print(
         f"ALL: {len(result['rows'])} rows, "
-        f"raw total={result['total']} raw_use={result['raw_use']} "
-        "occupancy/availability=UNKNOWN"
+        f"displayed total={result['total']} usage={result['in_use']} "
+        f"remaining={result['remaining']}"
     )
     for row in result["rows"]:
         print(
             f"  {row['building']}/{row['seat_type']}: "
-            f"raw_use={row['raw_use']} raw_total={row['total']}"
+            f"displayed usage={row['in_use']} remaining={row['remaining']} total={row['total']}"
         )
 
     # Filtered view consistency.

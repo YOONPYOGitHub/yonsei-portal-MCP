@@ -653,6 +653,85 @@ COPIES = '''<table class="searchTable"><thead><tr><th>No.</th><th>등록번호</
 </tbody></table>'''
 
 
+def test_facility_timeline_preserves_displayed_usage_without_booking():
+    from yonsei_portal_mcp.scrapers import facilities
+
+    cells = [{"label": "9", "classes": ["times"]}, {"label": "", "classes": ["use"]}, {"label": "10", "classes": ["times"]}]
+    result = facilities.parse_timeline(cells, 30)
+    assert result == [
+        {"start": "09:00", "end": "09:30", "used_mark": False, "display_status": "표시 없음"},
+        {"start": "09:30", "end": "10:00", "used_mark": True, "display_status": "사용 표시"},
+    ]
+
+
+@pytest.mark.parametrize("cells,unit", [
+    ([], 30),
+    ([{"label": "9", "classes": []}, {"label": "10", "classes": []}], 30),
+    ([{"label": "9", "classes": ["unknown"]}, {"label": "10", "classes": []}], 60),
+    ([{"label": "9", "classes": []}, {"label": "10", "classes": []}], 0),
+])
+def test_facility_timeline_rejects_changed_grid(cells, unit):
+    from yonsei_portal_mcp.scrapers import facilities
+
+    with pytest.raises(ScrapeFailedError):
+        facilities.parse_timeline(cells, unit)
+
+
+@pytest.mark.parametrize("options", [
+    {"date": "2026-02-30"}, {"date": "20261005"}, {"building": "unknown"},
+    {"group": "5F 세미나룸"}, {"building": "학술정보관", "facility": "세미나룸"},
+    {"duration_minutes": 30}, {"date": "2026-10-05", "building": "학술정보관", "group": "5F 세미나룸", "facility": "세미나룸", "duration_minutes": True},
+])
+def test_facility_invalid_inputs_are_rejected(options):
+    from yonsei_portal_mcp.scrapers import facilities
+
+    with pytest.raises(ValueError):
+        facilities.validate_filters(**options)
+
+
+@pytest.mark.asyncio
+async def test_facility_tool_registers_validates_and_caches_all_filters(monkeypatch):
+    from yonsei_portal_mcp import cache, server
+    from yonsei_portal_mcp.scrapers import facilities
+
+    fetch = AsyncMock(return_value={"options": {}, "time_slots": None})
+    monkeypatch.setattr(facilities, "fetch_facility_status", fetch)
+    monkeypatch.setattr(server, "_account", lambda: "synthetic-account")
+
+    async def run(action):
+        return await action(None)
+
+    monkeypatch.setattr(server, "get_library_session", lambda: SimpleNamespace(run=run))
+    cache.clear()
+    try:
+        tools = {tool.name: tool for tool in await server.mcp.list_tools()}
+        assert "get_library_facility_status" in tools
+        assert set(tools["get_library_facility_status"].inputSchema["properties"]) == {"date", "building", "group", "facility", "duration_minutes"}
+        for options in ({}, {"date": "2026-10-05"}, {"building": "학술정보관"}):
+            await server.get_library_facility_status(**options)
+            await server.get_library_facility_status(**options)
+        assert fetch.await_count == 3
+        with pytest.raises(ValueError):
+            await server.get_library_facility_status(group="unknown")
+        assert fetch.await_count == 3
+    finally:
+        cache.clear()
+
+
+def test_facility_options_snapshot_and_final_selection_are_checked():
+    from yonsei_portal_mcp.scrapers import facilities
+
+    source = {"headers": ["날짜", "도서관 선택", "그룹", "시설", "사용시간"], "columns": [[], [{"name": "학술정보관", "selectable": True, "selected": True}], [], [], []]}
+    options = facilities.parse_options_snapshot(source)
+    facilities.verify_selection(options, {"building": "학술정보관"})
+    with pytest.raises(ScrapeFailedError):
+        facilities.verify_selection(options, {"building": "중앙도서관"})
+    with pytest.raises(ScrapeFailedError):
+        facilities.parse_options_snapshot({**source, "headers": ["날짜", "그룹", "도서관 선택", "시설", "사용시간"]})
+    with pytest.raises(ScrapeFailedError):
+        facilities.parse_options_snapshot({**source, "columns": source["columns"][:4]})
+
+
 def test_book_copies_preserve_per_copy_status_and_blank_due_date():
     result = library.parse_book_copies(COPIES, "CATTOT123")
     assert result["count"] == 2

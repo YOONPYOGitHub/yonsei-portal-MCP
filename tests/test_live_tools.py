@@ -98,10 +98,13 @@ async def test_all_read_tools_over_stdio() -> None:
                 history = await invoke("get_lms_course_history", {}, dict, ("courses", "count", "has_pagination"))
                 public_seats = await invoke("get_library_seats", {}, dict)
                 assert public_seats["semantics_verified"] is False
-                assert public_seats["in_use"] is None and public_seats["remaining"] is None
+                assert public_seats["display_verified"] is True and public_seats["scope"] == "homepage_display"
+                assert len(public_seats["rows"]) == 8
                 seats = await invoke("get_library_seat_rooms", {}, dict, ("rooms", "count", "assignable_available", "source_totals_match"))
                 valid_seats = seats["source_totals_match"] is True and all(room["name"] != "합계" for room in seats["rooms"])
                 assert valid_seats, "Seat rooms must exclude source total and reconcile totals"
+                facility_options = await invoke("get_library_facility_status", {}, dict, ("options", "selected", "time_slots", "display_verified"))
+                assert facility_options["display_verified"] is True and facility_options["options"]["dates"]
                 calendar = await invoke("export_calendar_ics", {}, str)
                 valid_calendar = calendar.startswith("BEGIN:VCALENDAR")
                 assert valid_calendar, "Calendar format invalid"
@@ -426,15 +429,17 @@ async def test_library_fields_match_rendered_source() -> None:
     async def public_seats(page):
         from yonsei_portal_mcp.scrapers import seats as public
 
-        await page.goto("https://library.yonsei.ac.kr/", wait_until="domcontentloaded")
-        raw = await page.evaluate("async () => { const response = await fetch('/seat/info'); if (!response.ok) throw new Error('Seat HTTP error'); return response.json(); }")
-        result = public._parse(raw)
-        checks = []
-        for row in result["rows"]:
-            prefix = row["building_code"] + "_" + row["seat_type_code"]
-            checks.extend([row["total"] == raw[prefix + "_total"], row["raw_use"] == raw[prefix + "_use"], row["raw_total_minus_use"] == raw[prefix + "_total"] - raw[prefix + "_use"], row["in_use"] is None, row["remaining"] is None])
-        checks.append(result["raw_use"] == sum(row["raw_use"] for row in result["rows"]))
-        checks.extend([result["semantics_verified"] is False, result["remaining"] is None])
+        result = public.parse_displayed_seats(await public.read_displayed_tables(page))
+        original = await page.locator("table").evaluate_all("""tables => tables
+            .filter(table => table.querySelector('tr.central,tr.academic') && !table.closest('.slick-cloned'))
+            .flatMap(table => Array.from(table.querySelectorAll('tbody tr'), row => ({
+                building: row.querySelector('.type').textContent.trim(),
+                kind: row.querySelector('.name').textContent.trim(),
+                values: Array.from(row.querySelectorAll('td')).slice(1).map(cell => Number(cell.innerText.trim().replaceAll(',', '')))
+            })))""")
+        checks = [len(original) == len(result["rows"]) == 8, result["display_verified"] is True]
+        for raw, row in zip(original, result["rows"]):
+            checks.extend([raw["values"] == [row["total"], row["in_use"], row["remaining"]], raw["building"] == row["building_label_raw"], raw["kind"] == row["seat_type_label_raw"]])
         if not all(checks):
             pytest.fail("Public seat source mismatch", pytrace=False)
 
@@ -486,6 +491,59 @@ async def test_library_fields_match_rendered_source() -> None:
         pytest.fail(f"Library source comparison: {type(exc).__name__} (payload suppressed)", pytrace=False)
     finally:
         await session.close()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+@pytest.mark.parametrize("view", ["options", "disabled", "timeline"])
+async def test_facility_status_matches_readonly_ui(view) -> None:
+    if os.getenv("RUN_LIVE_PORTAL") != "1":
+        pytest.skip("set RUN_LIVE_PORTAL=1 for facility UI comparison")
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from yonsei_portal_mcp.scrapers import facilities
+    from yonsei_portal_mcp.session import get_library_session
+
+    session = get_library_session()
+    failure = None
+    try:
+        async with session.page() as page:
+            writes = []
+            page.on("request", lambda request: writes.append(request.method) if urlsplit(request.url).netloc == "libadm.yonsei.ac.kr:444" and urlsplit(request.url).path != "/login_library" and request.method not in {"GET", "HEAD"} else None)
+            date = (datetime.now(ZoneInfo("Asia/Seoul")).date() + timedelta(days=1)).isoformat()
+            arguments = {"date": date}
+            if view != "options":
+                arguments.update(building="학술정보관", group="5F 세미나룸" if view == "disabled" else "1F Y-스마트 스페이스", facility="세미나룸 5-1" if view == "disabled" else "세미나룸(Yellow)", duration_minutes=30)
+            result = await facilities.fetch_facility_status(page, **arguments)
+            raw = await page.locator("table.facilityTbl.onlyPc tbody > tr > td").evaluate_all(r"""cells => cells.map(cell => Array.from(cell.querySelectorAll('.selectFacility'), element => ({
+                name: element.textContent.trim().replace(/\s+/g, ' '),
+                selectable: !element.classList.contains('disable'), selected: element.classList.contains('active')
+            })))""")
+            for column, key in zip(raw, ("dates", "buildings", "groups", "facilities", "durations")):
+                matches = column == [{field: item[field] for field in ("name", "selectable", "selected")} for item in result["options"][key]]
+                if not matches:
+                    raise ValueError("Facility options differ from visible source")
+            if view == "timeline":
+                cells = await page.locator(".graphWrapper.active .graphView > div").evaluate_all("elements => elements.map(element => ({label:element.textContent.trim(),used:element.classList.contains('use')}))")
+                assert result["count"] == len(cells) - 1
+                assert [slot["used_mark"] for slot in result["time_slots"]] == [cell["used"] for cell in cells[:-1]]
+                assert result["selected"] == arguments and result["selection_applied"]
+                for index, cell in enumerate(cells[:-1]):
+                    if cell["label"]:
+                        assert result["time_slots"][index]["start"] == f"{int(cell['label']):02d}:00"
+                assert result["time_slots"][-1]["end"] == f"{int(cells[-1]['label']):02d}:00"
+            elif view == "disabled":
+                assert result["selection_applied"] is False and result["time_slots"] is None
+                assert result["unavailable_selection"] == {"facility": arguments["facility"]}
+            else:
+                assert result["time_slots"] is None and result["selected"]["date"] == date
+            assert not writes, "Facility verification must not send modification requests"
+    except Exception as exc:
+        failure = type(exc).__name__
+    finally:
+        await session.close()
+    if failure:
+        pytest.fail(f"Facility source verification: {failure} (payload suppressed)", pytrace=False)
 
 
 @pytest.mark.live

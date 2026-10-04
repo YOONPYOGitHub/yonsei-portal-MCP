@@ -1,6 +1,6 @@
 # 도구 API 참조
 
-**0.5.0b1 개발 소스와 이후 Unreleased 수정**의 MCP 도구 33개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
+**0.5.0b1 개발 소스와 이후 Unreleased 수정**의 MCP 도구 34개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
 설치와 연결은 [README](../README.md), 구조와 운영 계약은 [DESIGN](../DESIGN.md), 개발·검증 절차는 [개발 문서](DEVELOPMENT.md)를 참고하세요.
 
 ## 기능별 바로가기
@@ -13,7 +13,7 @@
 | LearnUs 과제·성적 | [과제 목록](#get_lms_assignments) · [제출·채점 상태](#get_lms_assignment_status) · [성적부](#get_lms_gradebook) |
 | LearnUs 공지·게시판 | [공지 목록](#get_lms_notices) · [공지 검색](#search_notices) · [본문](#get_notice) · [게시판 목록](#get_lms_boards) · [게시글 목록](#get_lms_board_posts) |
 | 도서관 공개 조회 | [도서 검색](#search_library_books) · [복본 상세](#get_library_book_detail) · [일반공지](#get_library_notices) · [좌석 집계](#get_library_seats) |
-| 도서관 로그인 조회 | [열람실별 좌석](#get_library_seat_rooms) · [내 대출](#get_my_loans) · [현재 예약](#get_my_reservations) · [대출 이력](#get_my_loan_history) · [이전 예약](#get_my_reservation_history) |
+| 도서관 로그인 조회 | [열람실별 좌석](#get_library_seat_rooms) · [세미나룸·시설 현황](#get_library_facility_status) · [내 대출](#get_my_loans) · [현재 예약](#get_my_reservations) · [대출 이력](#get_my_loan_history) · [이전 예약](#get_my_reservation_history) |
 | 학사행정 ERP | [프로필](#get_student_profile) · [시간표](#get_my_timetable) · [성적](#get_grades) · [시험](#get_exam_schedule) · [장학수혜](#get_scholarship_history) · [수강편람](#search_courses) |
 | 일정·내보내기 | [학사일정](#get_academic_calendar) · [개인 일정](#get_my_schedule) · [마감·반납일 ICS](#export_calendar_ics) · [반복 시간표 ICS](#export_timetable_ics) |
 
@@ -306,11 +306,12 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 | --- | --- | --- | --- |
 | `seat_type` | `string` 또는 `null` | `null` | `general`/일반열람석, `pc`/PC석, `study`/스터디룸, `notebook`/노트북석; 생략 또는 `""`이면 전체 |
 
-인증·출처·캐시: 무로그인 공개 HTTP, 도서관 `/seat/info`, 입력 필터별 공유 캐시 60초.
-반환: `rows`, `total`, `raw_use`, `raw_total_minus_use`, `in_use=null`, `remaining=null`, `usage_pct=null`, `semantics_verified=false`, `scope="public_widget_api"`, `source_url`, `fetched_at`, `availability_note`. 행은 `building`, `building_code`(`center`/`yonsei`), `seat_type`, `seat_type_code`, 원문 `total`·`raw_use`·차이값 `raw_total_minus_use`와 미확인 `in_use`·`remaining`·`usage_pct`를 포함합니다.
-범위: 건물군×유형의 공개 API 원문 수치입니다. `total=0`·`raw_use=0`인 행은 제외하고, 필터를 적용한 행의 원문 수치만 합산합니다. 지원 필터는 공백 제거·소문자 변환 및 한글 이름 매칭으로 정규화합니다. **알 수 없는 유형이나 공백만 있는 문자열은 요청 전에 오류**이며 정상 0석으로 바꾸지 않습니다.
-주의: 2026-10-03 같은 응답을 대조한 결과, API `use`와 홈페이지의 사용/잔여 칸이 서로 충돌했습니다. **`raw_use`나 `raw_total_minus_use`를 사용 중·잔여석으로 해석하거나 이를 근거로 이용 가능한 좌석/방을 추천하면 안 됩니다.** `total`도 전체 열람실 수용력 보증이 아닙니다. 실제 표에 표시된 열람실별 현황은 로그인 도구 [get_library_seat_rooms](#get_library_seat_rooms)로 확인합니다. 두 원천은 범위가 달라 합산하지 않습니다.
-`seat_type="study"`는 시간대별 세미나룸 예약 가능 여부나 개인 시설 예약내역을 제공하지 않습니다.
+인증·출처·캐시: 학교 로그인 없는 독립 Chromium, 도서관 홈페이지의 실제 JavaScript 갱신 표, 입력 필터별 공유 캐시 60초. **Chromium 설치가 필요합니다.**
+반환: `rows`, `total`, `in_use`, `remaining`, `usage_pct=null`, `display_verified=true`, `semantics_verified=false`, `scope="homepage_display"`, `totals_scope="sum_of_displayed_rows"`, `source_totals_match`, `source_url`, `fetched_at`, `availability_note`.
+행은 `building`, `building_code`, `seat_type`, `seat_type_code`, `building_label_raw`, `seat_type_label_raw`, `total`, `in_use`, `remaining`, `usage_pct=null`, `source_totals_match`입니다. `total/in_use/remaining`은 화면의 전체/사용/잔여석 칸 그대로이며 API 키 이름으로 뒤집거나 계산한 값이 아닙니다. 0인 행도 보존합니다. `raw_use`/`raw_total_minus_use`는 더 이상 공개 응답에 포함하지 않습니다.
+범위: 중앙·학술 각 4종의 8행을 확인한 뒤 필터를 적용합니다. **알 수 없는 유형이나 공백만 있는 문자열은 요청 전에 오류**이며 정상 0석으로 바꾸지 않습니다. 누락·중복 행이나 숫자 미준비도 오류입니다.
+`source_totals_match=false`는 해당 행에서 화면의 전체와 사용+잔여가 다르다는 뜻이며 원문을 임의로 보정하지 않습니다. 최상위 합계는 반환 행의 합산이지 홈페이지에 별도로 표시된 총합이 아닙니다. `display_verified`는 화면과의 일치, `semantics_verified=false`는 실제 점유·착석·예약 가능성까지 입증하지 않았다는 구분입니다. 로그인 열람실과 범위가 달라 합산하지 않습니다.
+`seat_type="study"`는 홈페이지 스터디룸 행만 필터합니다. 특정 세미나룸의 날짜별 시간표는 [get_library_facility_status](#get_library_facility_status)를 사용하세요.
 
 ### `get_library_seat_rooms`
 
@@ -321,7 +322,23 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 인증·출처·캐시: 도서관 로그인, `/relation/seat` 열람실별 좌석 표, 계정별 60초. 로그인은 필요하지만 개인 배정 내역은 아닙니다.
 반환: `count`, `rooms`, `total`, `in_use`, `available`, `source_totals_match`(`true` 또는 원문 합계 미표시 시 `null`), `assignable_available`, `unassignable_rooms`, `usage_pct`, `availability_note`, `source_url`, `fetched_at`.
 항목: `name`, `assignable`(불리언), `total`(운영좌석), `capacity`(수용좌석, `null` 가능), `in_use`, `available`, `hours`(원문), `usage_pct`·`note`(`null` 가능). `count`는 열람실 수입니다. 원문 합계 불일치는 `false` 반환이 아닌 오류입니다.
-범위: `available`은 배정불가 방도 포함한 표시 잔여석, `assignable_available`은 배정가능 방만의 잔여 합계, `unassignable_rooms`는 배정불가 방 수입니다. 이용률이 `%`만 표시되는 행은 `usage_pct=null`입니다. 어느 값도 실제 착석을 보장하지 않습니다. 세미나룸·스터디룸의 시간대별 예약표와 개인 시설 예약내역은 미지원이며, 도서 예약 도구로 대체할 수 없습니다.
+범위: `available`은 배정불가 방도 포함한 표시 잔여석, `assignable_available`은 배정가능 방만의 잔여 합계, `unassignable_rooms`는 배정불가 방 수입니다. 이용률이 `%`만 표시되는 행은 `usage_pct=null`입니다. 어느 값도 실제 착석을 보장하지 않습니다. 세미나룸 시간표는 다음 도구로 조회하며 개인 시설 예약내역 조회는 지원하지 않습니다.
+
+### `get_library_facility_status`
+
+| 인자 | 형식 | 기본값 | 설명 |
+| --- | --- | --- | --- |
+| `date` | `string` 또는 `null` | `null` | YYYY-MM-DD; 생략 시 KST 오늘. 화면에 표시된 날짜만 허용 |
+| `building` | `string` 또는 `null` | `null` | `학술정보관` 또는 `중앙도서관`; 생략하면 날짜·도서관 목록 |
+| `group` | `string` 또는 `null` | `null` | 앞선 `options.groups`의 이름; building 필요 |
+| `facility` | `string` 또는 `null` | `null` | `options.facilities`의 이름; group 필요 |
+| `duration_minutes` | `integer` 또는 `null` | `null` | `options.durations`의 minutes; facility 필요. 1~1440 중 실제 표시 선택지만 허용 |
+
+인증·출처·캐시: 도서관 SSO에서 실제 `https://libadm.yonsei.ac.kr:444/fac` UI로 이동. 계정·모든 입력별 60초 캐시. TLS 검증을 유지합니다. 포트 없는 443 주소와 다른 서비스입니다.
+반환: `requested_filters`, 실제 적용한 `selected`, `options`(dates/buildings/groups/facilities/durations), `selection_applied`, `unavailable_selection`, `time_slots`, `count`, `scope="facility_ui"`, `display_verified=true`, `source_url`, `fetched_at`, `note`.
+각 선택지는 `name`, `selectable`, `selected`를 포함하며 날짜에는 ISO `date`, 사용시간에는 정수 `minutes`가 추가됩니다. 인자 없이 목록부터 읽고 필요한 단계의 이름을 다음 호출에 전달하세요. 입력한 필터가 목록에 없으면 오류이며 다른 시설로 대체하지 않습니다.
+모든 조건을 선택하면 시간표의 `start`, `end`, `used_mark`, `display_status`를 반환합니다. `count`는 시간 구간 수이며 시설 수가 아닙니다. 원문 구간 단위와 표시 시간축을 대조하며, `display_status`는 `사용 표시` 또는 `표시 없음`입니다. 표시 없는 구간은 예약 확정이나 이용 자격 확인을 뜻하지 않습니다. 표 머리글·날짜 목록·최종 선택값이 조회 도중 바뀌면 오류로 처리합니다.
+`time_slots=null`, `count=null`은 시간표를 아직 선택하지 않은 상태이며 예약 가능 시간 0건이 아닙니다. 선택 불가 시설은 `selection_applied=false`와 `unavailable_selection`으로 표시합니다. 날짜·건물·그룹·시설·사용시간 선택만 수행하고, 시간대 클릭·참가자 등록·예약 생성/취소는 수행하지 않습니다. 시설 화면에서 GET/HEAD 이외 요청은 차단합니다(정상 SSO 인증 POST는 진입 전에 수행).
 
 ## 학사행정 ERP
 
@@ -333,7 +350,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 인증·출처·캐시: ERP 로그인, 수강신청내역의 프로필·학기 데이터, 계정별 1800초. 원본 캐시에서 이름·학번을 응답 직전에 걸러냅니다.
 반환: `department`, `department_full`, `department_code`, `current_term`, `current_term_credits`, `terms`, `pii_included`. 학기 항목은 `term`, `year`, `code`, `credits`; 원천 형식을 보존하며 누락 값은 `null`입니다. `include_pii=true`일 때만 `name`, `student_no` 키를 포함합니다.
-범위: `current_term`은 반환 학기 코드가 가장 큰 행에서 가져오며 오늘 기준 재학 상태를 계산한 값이 아닙니다. 기본 응답도 학과·수강학점을 포함한 개인정보이고, 기본 필터가 내부 캐시의 이름·학번까지 삭제하지는 않습니다.
+범위: 프로필·학기 두 데이터셋과 필수 필드를 모두 확인한 경우만 반환합니다. 학기 응답 누락을 빈 이력으로 바꾸지 않으며 명시적인 빈 배열만 허용합니다. `current_term`은 반환 학기 코드가 가장 큰 행에서 가져오며 오늘 기준 재학 상태를 계산한 값이 아닙니다. 기본 응답도 학과·수강학점을 포함한 개인정보이고, 기본 필터가 내부 캐시의 이름·학번까지 삭제하지는 않습니다.
 
 ### `get_my_timetable`
 
