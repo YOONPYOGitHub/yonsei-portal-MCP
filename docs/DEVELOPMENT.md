@@ -223,7 +223,7 @@ PYTHON_DOTENV_DISABLED=1 RUN_LIVE_PORTAL=0 RUN_LIVE_LLM=0 \
 | `macos-latest` | 3.11 |
 | `windows-latest` | 3.11 |
 
-Windows는 Git Bash로 네이티브 setup-python·uv·Chromium을 실행하며 WSL 검사가 아닙니다. 새 네이티브 Windows runner는 구성 단계로 실제 원격 실행 결과가 아직 확인되지 않았습니다. 매트릭스 구성·로컬 성공·해당 SHA의 원격 성공을 구분하고 Windows 로그인/NTFS ACL을 검증했다고 쓰지 마세요. 학교·LLM 자격 증명 없이 `not live and not llm` 회귀를 실행합니다.
+Windows는 Git Bash로 네이티브 setup-python·uv·Chromium을 실행하며 WSL 검사가 아닙니다. 네이티브 Windows의 오프라인 회귀·빌드·독립 wheel 설치를 실제 원격 실행으로 확인했습니다([검증 기록](VALIDATION.md)). 매트릭스 구성·로컬 성공·해당 SHA의 원격 성공을 구분하고 Windows 로그인/NTFS ACL을 검증했다고 쓰지 마세요. 학교·LLM 자격 증명 없이 `not live and not llm` 회귀를 실행합니다.
 
 [Security](../.github/workflows/security.yml)는 push·PR·매주 월요일 04:23 UTC·수동 실행에서 별도로 수행하도록 구성했습니다.
 

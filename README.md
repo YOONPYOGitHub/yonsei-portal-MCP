@@ -143,7 +143,7 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 
 ### 1. 실행 환경 준비
 
-- Python **3.10 이상**: macOS·Linux·WSL·네이티브 Windows에서 같은 소스 설치 명령을 사용합니다. CI는 Linux 3.10·3.11·3.12, macOS 3.11, Windows 3.11의 5개 조합으로 구성합니다. 네이티브 Windows runner는 새로 구성한 상태이며 실제 실행·로그인·ACL 검증 완료를 뜻하지 않습니다. 버전별 실행 근거는 [검증 기록](docs/VALIDATION.md)을 확인하세요.
+- Python **3.10 이상**: macOS·Linux·WSL·네이티브 Windows에서 같은 소스 설치 명령을 사용합니다. CI는 Linux 3.10·3.11·3.12, macOS 3.11, Windows 3.11의 5개 조합으로 구성합니다. 네이티브 Windows runner의 오프라인 회귀·빌드·독립 wheel 설치를 실제 CI에서 검증했습니다. 학교 계정 로그인·ACL 검증은 별도 범위입니다. 버전별 실행 근거는 [검증 기록](docs/VALIDATION.md)을 확인하세요.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)와 Git.
 - 로그인 조회: 유효한 본인 계정, Chromium, 필요시 브라우저 창을 표시할 데스크톱 환경.
 - 도서 검색·공지·학사일정만 사용: 학교 자격 증명과 Chromium 설치 생략 가능. 공개 홈페이지 좌석 표는 로그인 없이 Chromium이 필요합니다.

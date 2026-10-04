@@ -30,7 +30,7 @@ Python 패키지 버전은 [PEP 440](https://peps.python.org/pep-0440/)의 베�
 - `--json`, 검사별 `--timeout`, 종료 코드 0(필수 로컬 점검 성공)/1(필수 점검 실패)/2(인자·지정 설정 오류). 자격 증명·Chromium은 기본 선택 사항이며 성공이 실제 로그인이나 보안 감사 통과를 뜻하지 않음.
 
 ### CI와 보안 자동화
-- 기존 Linux/Python 3.10·3.11·3.12, macOS/Python 3.11에 네이티브 Windows/Python 3.11을 더해 5개 조합 구성. OS별 Chromium·wheel Python 경로와 이식 가능한 pytest 설정 파일 사용. 새 Windows runner의 실제 실행·로그인·NTFS ACL 검증은 아직 확인되지 않음.
+- 기존 Linux/Python 3.10·3.11·3.12, macOS/Python 3.11에 네이티브 Windows/Python 3.11을 더해 5개 조합 구성. OS별 Chromium·wheel Python 경로와 이식 가능한 pytest 설정 파일 사용. 네이티브 Windows의 오프라인 회귀·빌드·독립 wheel 설치를 실제 CI에서 확인. 학교 계정 로그인·NTFS ACL 검증은 별도 범위.
 - 별도 Security workflow를 push·PR·주간·수동 실행으로 구성. 잠금 런타임 의존성의 pip-audit와 전체 Git 이력·현재 공개 트리의 비식별 Gitleaks 검사. 읽기 전용 권한·고정된 도구/Action 버전·보고서 비업로드 유지. 구성만으로 실제 CI 통과를 주장하지 않음.
 - macOS·Linux·WSL·Windows 설치 안내와 진단·공지 계약 갱신. 기존 문서의 언어·문체 및 영어 법적 원문을 유지하도록 기여 원칙 정리. 실제 검증 범위는 [검증 기록](docs/VALIDATION.md)에서 별도로 관리.
 

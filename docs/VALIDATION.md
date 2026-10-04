@@ -8,7 +8,7 @@ GitHub Actions 러너의 별도 실행 결과로 검증합니다. 개인 자격 
 
 | 검사 | 실제 결과 |
 |---|---|
-| macOS Python 3.10.20 / 3.11.15 / 3.12.13 | 각각 **1166 passed, 1 skipped, 24 deselected** (라이브/LLM 제외; skip은 네이티브 Windows 전용 시간대 검사) |
+| macOS Python 3.10.20 / 3.11.15 / 3.12.13 | 각각 **1168 passed, 1 skipped, 24 deselected** (라이브/LLM 제외; skip은 네이티브 Windows 전용 시간대 검사) |
 | `doctor --browser --json` | 종료 0, Chromium 격리 기동 성공, 실제 MCP initialize/tools/list **38개** |
 | 실제 MCP/포털 기존 회귀 21항목 | 최종 전체 실행 20 passed / 1 failed; 실패한 stdio 통합 항목 단독 재실행 1 passed. 한 번의 21개 일괄 성공으로 표시하지 않음 |
 | stdio 통합 재검사 | 등록된 **38개 도구 모두 실제 호출**, 등록 목록과 호출 집합 일치 |
@@ -17,7 +17,7 @@ GitHub Actions 러너의 별도 실행 결과로 검증합니다. 개인 자격 
 | 일반대학원 공지 | 1·2페이지 각 21건(고정글 포함), 목록 및 선택 본문 DOM 일치 |
 | 인공지능융합대학원 공지 | 1·2페이지 각 12건(고정글 포함), 목록 및 선택 본문 DOM 일치 |
 | 배포물 | sdist→wheel 빌드, `twine check` 통과 |
-| 독립 wheel | 소스 밖 새 Python 3.11 환경의 패키징/메타데이터 6 passed; 설치본 doctor 종료 0·38개 도구 |
+| 독립 wheel | 소스 밖 새 Python 3.11 환경의 패키징/메타데이터/Windows 의존성 선언 7 passed, 1 skipped; 설치본 doctor 종료 0·38개 도구 |
 | 잠금 런타임 감사 | `pip-audit==2.9.0 --require-hashes --disable-pip --strict` 알려진 취약점 미탐지 |
 | 공개 파일·Git 이력 | Gitleaks 8.30.1, redacted 검사 미탐지; 비공개 파일은 수집·게시하지 않음 |
 
@@ -47,8 +47,14 @@ GitHub Actions 러너의 별도 실행 결과로 검증합니다. 개인 자격 
 - CI 매트릭스: Linux Python 3.10/3.11/3.12, macOS 3.11, **네이티브 Windows 3.11**.
 - 별도 Security 워크플로: 잠금 런타임 의존성 감사와 전체 Git 이력/공개 트리 비밀정보 검사.
   push/PR·주간·수동 실행, 최소 읽기 권한, 학교/LLM 자격 증명 없이 실행합니다.
-- **원격 실행 결과는 해당 커밋의 [Actions](https://github.com/YOONPYOGitHub/yonsei-portal-MCP/actions)에서 확인합니다.**
-  이 문서 작성 시점에는 새 CI 구성을 원격 실행하기 전이며, 로컬 성공을 Windows 성공으로 대체하지 않습니다.
+- 코드 커밋 [`6ff4b34`](https://github.com/YOONPYOGitHub/yonsei-portal-MCP/commit/6ff4b342e11afce4546eb8c2a87c8fdd1d211853)의
+  [CI 5개 작업](https://github.com/YOONPYOGitHub/yonsei-portal-MCP/actions/runs/37220296131)과
+  [Security 2개 작업](https://github.com/YOONPYOGitHub/yonsei-portal-MCP/actions/runs/37220296200)이 모두 성공했습니다.
+  Windows 실제 결과는 **1161 passed, 8 skipped, 24 deselected**, 독립 wheel 검사 **6 passed**입니다.
+  POSIX 권한/심볼릭 링크 전용 검사 등은 해당 OS에서 제외되며 KST 시간대 검사는 Windows에서 실행됩니다.
+- 초기 Windows 실행에서 네트워크 차단 fixture의 설치 순서와 subprocess 감사 인자 표현 차이를
+  발견했습니다. 비동기 루프 초기화 이후 차단을 설치하고, stdlib 소켓쌍의 자체 IPC만 검증해 허용하도록
+  테스트 보조 코드를 수정했습니다. 임의 loopback/외부 연결·DNS는 계속 차단하며 검사 생략으로 해결하지 않았습니다.
 - Windows에서 본인 학교 계정 로그인·NTFS ACL을 실검증한 것은 아닙니다. WSL 전용 러너도 아니므로
   Linux 통과가 모든 WSL 배포판/Windows Desktop 연결을 보증하지 않습니다.
 - 실제 외부 LLM은 호출하지 않았습니다. 인증 검증은 승인된 단일 계정 표본이며 전 계정 보증이 아닙니다.
