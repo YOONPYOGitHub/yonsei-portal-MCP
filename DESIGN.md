@@ -98,7 +98,7 @@ ERP 화면은 cpr/eXBuilder의 `.clx.js` 기반입니다.
 
 `__main__.py`는 `doctor`를 먼저 분기하고 인자 없는 기존 MCP stdio 실행을 유지합니다. 진단 기본값은 현재 폴더 `.env`의 존재만 검사하며 내용·쿠키를 읽지 않습니다. 명시적 `--env-file`만 내용 검사하고 자격 증명은 존재 여부·출처만 출력합니다. 상위 폴더 탐색·변수 치환·환경 변경·인증 확인은 하지 않습니다.
 설치·버전·Chromium 실행 파일과 격리된 자식 프로세스의 `initialize → tools/list`를 확인하며 포털·LLM 호출은 없습니다. `--browser`만 임시 Chromium의 `about:blank`를 시작합니다. 원시 예외·서버 stderr·개인 경로·비밀값은 진단 출력에서 제외합니다. 종료 코드 0/1/2는 각각 필수 로컬 점검 성공/필수 점검 실패/인자·지정 설정 오류이며 기본 모드에서 자격 증명·Chromium은 선택 사항입니다. 이는 보안 감사·실제 학교 접속 검증이 아닙니다.
-CI는 Linux 3.10·3.11·3.12, macOS 3.11, 네이티브 Windows 3.11의 5개 조합으로 구성합니다. 새 Windows runner의 실제 실행·로그인·NTFS ACL 검증 완료를 주장하지 않습니다. 별도 Security workflow는 push·PR·주간·수동 실행에서 잠금 런타임 의존성 감사와 비식별 Gitleaks 이력/공개 트리 검사를 구성합니다. 구성과 실행 증거는 [개발 가이드](docs/DEVELOPMENT.md)·[검증 기록](docs/VALIDATION.md)에서 구분합니다.
+CI는 Linux 3.10·3.11·3.12, macOS 3.11, 네이티브 Windows 3.11의 5개 조합으로 구성합니다. 네이티브 Windows의 오프라인 회귀·빌드·독립 wheel 설치 성공을 원격 CI에서 확인했으며, Windows 로그인·NTFS ACL 검증은 완료하지 않았습니다. 별도 Security workflow는 push·PR·주간·수동 실행에서 잠금 런타임 의존성 감사와 비식별 Gitleaks 이력/공개 트리 검사를 구성합니다. 구성과 실행 증거는 [개발 가이드](docs/DEVELOPMENT.md)·[검증 기록](docs/VALIDATION.md)에서 구분합니다.
 
 ### 캐시와 호출 부하
 
