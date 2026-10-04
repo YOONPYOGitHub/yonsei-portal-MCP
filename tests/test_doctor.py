@@ -66,16 +66,30 @@ def test_configuration_reports_only_presence_and_explicit_sources(tmp_path):
     assert "environment-secret" not in encoded and "length" not in encoded
 
 
-def test_real_stdio_handshake_is_isolated_and_never_reads_secrets(tmp_path):
+@pytest.mark.parametrize("tcp_socketpair", [False, True])
+def test_real_stdio_handshake_is_isolated_and_never_reads_secrets(tmp_path, tcp_socketpair):
     # The hook runs inside BOTH the doctor process and its actual server child.
     # Output pattern checks alone would not demonstrate isolation.
     hook = '''
-import os, subprocess, sys
+import os, socket, subprocess, sys
 from pathlib import Path
 marker = Path(__file__).with_name("audit-loaded")
 with marker.open("a") as stream:
     stream.write("loaded\\n")
+pair_codes = {getattr(function, "__code__", None) for function in
+              (socket.socketpair, getattr(socket, "_fallback_socketpair", None))} - {None}
 def audit(event, args):
+    if event == "socket.connect":
+        frame = sys._getframe(1)
+        # Permit only the stdlib's own connected socket pair, never arbitrary
+        # loopback traffic. Windows asyncio uses it for internal wakeups.
+        if frame.f_code in pair_codes:
+            local = frame.f_locals
+            listener = local.get("lsock")
+            if (args[0] is local.get("csock") and listener is not None
+                    and args[1] == listener.getsockname()[:2]
+                    and args[1][0] in {"127.0.0.1", "::1"}):
+                return
     if event in {"socket.connect", "socket.getaddrinfo"}:
         raise AssertionError("network forbidden")
     if event == "open" and isinstance(args[0], (str, bytes)):
@@ -96,13 +110,31 @@ def audit(event, args):
         assert Path(env["YONSEI_STORAGE_STATE"]).is_relative_to(Path(cwd))
 sys.addaudithook(audit)
 '''
+    if tcp_socketpair:
+        # Exercise the standard-library TCP socketpair used by Windows on every OS.
+        hook += '\nimport socket\nsocket.socketpair = getattr(socket, "_fallback_socketpair", socket.socketpair)\n'
     (tmp_path / "sitecustomize.py").write_text(hook, encoding="utf-8")
     (tmp_path / ".env").write_text("YONSEI_PASSWORD=NEVER_READ_SYNTHETIC\n", encoding="utf-8")
     code = '''
-import os, sys
+import os, socket, sys
 from pathlib import Path
 import sitecustomize
 from yonsei_portal_mcp import doctor
+with socket.socket() as closed:
+    pass
+for target in (("127.0.0.1", 1), ("192.0.2.1", 443)):
+    try:
+        closed.connect(target)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("ordinary connect was not blocked")
+try:
+    socket.getaddrinfo(None, 443)
+except AssertionError:
+    pass
+else:
+    raise AssertionError("DNS guard was not active")
 os.environ.update(YONSEI_ID="student-secret", YONSEI_PASSWORD="password-secret", OPENAI_API_KEY="llm-secret")
 original = doctor.child_environment
 def instrumented(root):
