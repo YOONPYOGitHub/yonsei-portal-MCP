@@ -220,11 +220,36 @@ async def test_scraper_filters_reject_before_navigation(name, arguments):
 
 
 @pytest.fixture(autouse=True)
-def forbid_network(monkeypatch):
+async def forbid_network(monkeypatch):
     import socket
     def blocked(*args, **kwargs):
         pytest.fail("Network access is forbidden in contract tests")
-    monkeypatch.setattr(socket.socket, "connect", blocked)
+    # Start after the loop creates its Windows socketpair, restore before cleanup.
+    # No address (including loopback) is exempt while a test is running.
+    with monkeypatch.context() as guard:
+        guard.setattr(socket.socket, "connect", blocked)
+        guard.setattr(socket.socket, "connect_ex", blocked)
+        guard.setattr(socket, "getaddrinfo", blocked)
+        yield
+
+
+@pytest.mark.asyncio
+async def test_network_guard_blocks_connect_and_dns_without_network(monkeypatch):
+    import _socket
+    import socket
+
+    def unexpected_dns(*args, **kwargs):
+        raise AssertionError("DNS reached the resolver")
+
+    # Even a broken guard must not reach a real socket or DNS resolver.
+    monkeypatch.setattr(_socket, "getaddrinfo", unexpected_dns)
+    with socket.socket() as closed_socket:
+        pass
+    for method in (closed_socket.connect, closed_socket.connect_ex):
+        with pytest.raises(pytest.fail.Exception, match="Network access is forbidden"):
+            method(("192.0.2.1", 443))
+    with pytest.raises(pytest.fail.Exception, match="Network access is forbidden"):
+        socket.getaddrinfo("external.invalid", 443)
 
 
 @pytest.mark.asyncio

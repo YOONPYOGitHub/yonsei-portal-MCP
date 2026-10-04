@@ -70,7 +70,7 @@ def test_real_stdio_handshake_is_isolated_and_never_reads_secrets(tmp_path):
     # The hook runs inside BOTH the doctor process and its actual server child.
     # Output pattern checks alone would not demonstrate isolation.
     hook = '''
-import os, sys
+import os, subprocess, sys
 from pathlib import Path
 marker = Path(__file__).with_name("audit-loaded")
 with marker.open("a") as stream:
@@ -84,7 +84,9 @@ def audit(event, args):
             raise AssertionError("secret read forbidden")
     if event == "subprocess.Popen":
         _, command, cwd, env = args
-        assert command[-2:] == ["-m", "yonsei_portal_mcp"]
+        expected = [sys.executable, "-B", "-m", "yonsei_portal_mcp"]
+        # Windows audits the serialized command line; POSIX audits argv.
+        assert command == (subprocess.list2cmdline(expected) if isinstance(command, str) else expected)
         assert "doctor" not in command
         assert env["PYTHON_DOTENV_DISABLED"] == "1"
         assert env["RUN_LIVE_PORTAL"] == env["RUN_LIVE_LLM"] == "0"
