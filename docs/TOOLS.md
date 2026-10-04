@@ -84,7 +84,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 인증·출처·캐시: LearnUs 로그인, 달력의 예정된 할 일, 계정·필터별 300초.
 반환: 배열. `title`, `due`(KST ISO 시각 또는 `null`), `due_text`(원문), `kind`, `course_id`, `course`, `url`, `source="calendar"`. 원문·강좌·URL도 `null`일 수 있습니다. URL 중복을 제거하고 마감 오름차순, 시각 미확인은 마지막에 둡니다.
-범위: 숫자 ID 형식 검사는 없으며 문자열이 정확히 일치하는 항목만 남깁니다. `kind`는 제목 문구 기반 분류로 `assignment`, `progress`(진도 종료), `completion`(수료 권장일)입니다. 뒤 두 종류는 제출 과제가 아니며, 제출 여부는 이 결과로 알 수 없습니다.
+범위: `course_id`를 지정하면 ID 형식을 먼저 검사하며, 통과한 문자열과 강좌 ID가 정확히 일치하는 항목만 남깁니다. `kind`는 제목 문구 기반 분류로 `assignment`, `progress`(진도 종료), `completion`(수료 권장일)입니다. 뒤 두 종류는 제출 과제가 아니며, 제출 여부는 이 결과로 알 수 없습니다.
 
 ### `get_lms_notices`
 
