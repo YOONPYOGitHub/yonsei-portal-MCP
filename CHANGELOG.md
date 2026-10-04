@@ -8,26 +8,26 @@ Python 패키지 버전은 [PEP 440](https://peps.python.org/pep-0440/)의 베�
 
 ## [0.5.0b2] - 2026-10-04
 
-Source beta update; this entry does not assert a PyPI publication or GitHub Release.
+소스 베타의 변경 기록입니다. PyPI 게시나 GitHub Release 생성을 의미하지 않습니다.
 
-### Security
-- Validate school HTTPS origins and credential form destinations before login; reject host-substring lookalikes and unexpected origins. Preserve normal Yonsei SSO.
-- Protect local cookie storage with private POSIX permissions, symlink/unsafe-state rejection and atomic writes. Windows users must also configure private ACLs. Secrets are excluded from settings repr.
-- Update audited runtime dependencies, including MCP 1.30.0; require MCP >=1.28.1,<2 and anyio >=4.14.2,<5. No API keys or school credentials are needed for CI.
-- Respect dotenv opt-out across the application and the SDK settings loader; isolate credential-free tests.
-- Restrict notice URL query keys and ERP response origins, and allowlist ERP grade-term output fields.
+### 보안
+- 로그인 전에 학교 HTTPS 출처와 자격 증명 폼의 제출 대상을 검증. 정상 호스트 문자열이 포함된 유사 주소나 예상하지 못한 출처를 거절하고 정상 연세대 SSO는 유지.
+- 로컬 쿠키에 비공개 POSIX 권한·심볼릭 링크 및 안전하지 않은 상태 거절·원자적 저장을 적용. Windows는 사용자별 비공개 ACL도 필요하며 설정 객체의 repr에서 비밀 필드를 제외.
+- 보안 감사를 거친 런타임 의존성으로 갱신하고 MCP 1.30.0 사용. 요구 범위는 MCP >=1.28.1,<2, anyio >=4.14.2,<5. CI에는 API 키나 학교 자격 증명이 필요하지 않음.
+- 애플리케이션과 SDK 설정 로더에 dotenv 비활성 설정을 적용하고 자격 증명 없는 테스트 환경을 분리.
+- 공지 URL 쿼리 키·ERP 응답 출처를 제한하고, ERP 학기별 성적 응답은 허용된 필드만 반환.
 
-### Compatibility and reliability
-- All MCP tools reject unknown arguments and invalid input types. Misspelled filters no longer silently widen queries; invalid scopes/IDs fail before authentication.
-- Attendance tables with duplicate/effective-key collisions, inconsistent cell counts or no verified data rows fail explicitly. Normal blank headings remain supported as positional colN keys.
-- Coalesce identical in-flight cache requests and cap completed entries; preserve cancellation/failure isolation and clear semantics. Overview and component caches remain independent.
-- Keep all 34 tool names. Clients should refresh tools/list after updating; stricter inputs and minimized grade-term fields are intentional behavior changes.
+### 호환성과 안정성
+- 모든 MCP 도구에서 미등록 인자·잘못된 입력 형식을 거절. 필터 오타로 조회 범위가 조용히 넓어지지 않으며 잘못된 범위·ID는 인증 전에 거절.
+- 출석 표의 중복·실제 키 충돌, 셀 수 불일치, 확인된 데이터 행이 없는 상태를 명시적 오류로 처리. 정상적인 빈 열 제목은 위치 기반 colN 키로 유지.
+- 동일 키의 진행 중 캐시 요청을 합치고 완료 항목 수를 제한. 취소·실패 격리와 clear 동작을 보존하며 종합 조회와 개별 도구의 캐시는 계속 독립적으로 유지.
+- 34개 도구 이름 유지. 업데이트 후 클라이언트의 tools/list 갱신 필요. 입력 검증 강화와 학기별 성적 필드 최소화는 의도한 동작 변경임.
 
-### Public repository
-- Separate normal school/MCP configuration from optional developer LLM examples. Add Hermes setup, security reporting, contributing and third-party scope guides.
-- Preserve MIT license/attribution; add SPDX license metadata and license-file packaging. University content, trademarks and personal data are not licensed by the project's MIT grant.
-- Add a credential-free dev extra and regression tests; extend offline CI to macOS in addition to the existing Linux/Python matrix.
-- Ignore private local agent reports, environment variants and build/test artifacts. New read-only portal features remain a roadmap, not claimed support.
+### 공개 저장소 정리
+- 일반 학교·MCP 설정과 선택적 개발용 LLM 예제를 분리. Hermes 연결, 보안 신고, 기여, 제3자 권리 범위 안내 추가.
+- MIT 라이선스와 작성자 표기를 유지하고 SPDX 메타데이터·라이선스 파일 패키징 추가. 학교 콘텐츠·상표·개인정보는 프로젝트의 MIT 허가 범위에 포함되지 않음.
+- 자격 증명 없이 사용하는 dev 선택 의존성과 회귀 테스트 추가. 기존 Linux/Python 구성에 macOS 오프라인 CI 추가.
+- 개인 로컬 에이전트 보고서, 환경 설정 변형 파일, 빌드·테스트 산출물을 Git에서 제외. 신규 읽기 전용 기능은 개발 후보이며 구현된 지원으로 표시하지 않음.
 
 ### Changed
 - 공개 좌석 도구를 익명 Chromium의 홈페이지 표 조회로 변경. `total/in_use/remaining`은 실제 셀 값, `display_verified=true`, `scope=homepage_display`. 0행과 합계 모순을 보존하고 최상위 합계는 표시 행 합산임을 명시. 로그인은 불필요하지만 Chromium이 필요하며 기존 `raw_use/raw_total_minus_use` 공개 반환은 제거.

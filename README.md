@@ -6,12 +6,12 @@
 
 [사용 가이드·실제 캡처](docs/USAGE.md) · [질문 예시](#이렇게-물어보세요) · [전체 기능 34개](#지원-기능-전체-목록) · [설치](#빠른-시작) · [클라이언트 연결](#클라이언트-연결) · [API 참조](docs/TOOLS.md)
 
-**Unofficial, local, read-only MCP for Yonsei University.** Use only your own authorized
-account. Your MCP client supplies the LLM; this server does not need an LLM API key.
-Python 3.10+, uv and (for authenticated queries) Playwright Chromium are required.
-See [security](SECURITY.md), [contributing](CONTRIBUTING.md), and
-[license/third-party scope](THIRD_PARTY_NOTICES.md). The MIT license does not grant
-rights to university content, trademarks or personal data.
+**본인에게 허용된 계정을 위한 비공식·로컬·읽기 전용 연세대 MCP입니다.**
+LLM은 연결한 클라이언트에서 제공하므로 이 서버에 별도 LLM API 키를 설정할 필요가 없습니다.
+Python 3.10 이상과 uv가 필요하며, 로그인 조회에는 Playwright Chromium도 필요합니다.
+[보안 정책](SECURITY.md), [기여 안내](CONTRIBUTING.md),
+[라이선스·제3자 고지](THIRD_PARTY_NOTICES.md)를 확인하세요.
+MIT 라이선스는 학교 콘텐츠·상표·개인정보에 대한 이용 권한을 부여하지 않습니다.
 
 > 이 프로젝트는 학교의 공식 서비스가 아닙니다. 본인에게 허용된 계정·조회 범위에서 사용하고 학교 이용 정책을 확인하세요.
 > 로그인 자격 증명은 학교 인증에 사용하며, 조회 결과는 연결한 MCP 클라이언트와 그 LLM에 전달될 수 있습니다.

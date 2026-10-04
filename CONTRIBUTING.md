@@ -1,64 +1,69 @@
-# Contributing / 기여 안내
+# 기여 안내
 
-Contributions are welcome for authorized, **read-only** use. Read
-[README](README.md), [tool contracts](docs/TOOLS.md), [design](DESIGN.md), and
-[security policy](SECURITY.md) first. This project is not affiliated with Yonsei
-University and does not grant permission to scrape accounts or redistribute
-university materials.
+본인에게 허용된 **읽기 전용** 사용을 위한 기여를 환영합니다.
+먼저 [README](README.md), [도구 계약](docs/TOOLS.md), [설계 문서](DESIGN.md),
+[보안 정책](SECURITY.md)을 확인하세요. 이 프로젝트는 연세대학교의 공식 서비스가 아니며,
+타인 계정 조회나 학교 자료 재배포를 허가하지 않습니다.
 
-## Development setup
+## 개발 환경 준비
 
-Python 3.10+ and [uv](https://docs.astral.sh/uv/) are required. From your clone:
+Python 3.10 이상과 [uv](https://docs.astral.sh/uv/)가 필요합니다. 복제한 저장소에서 실행하세요.
 
 ```bash
 uv sync --frozen --extra dev
-# Avoid removing Playwright revisions used by other local projects.
+# 다른 로컬 프로젝트에서 사용하는 Playwright 브라우저를 삭제하지 않도록 합니다.
 PLAYWRIGHT_SKIP_BROWSER_GC=1 uv run --no-sync playwright install chromium
 ```
 
-On PowerShell set `$env:PLAYWRIGHT_SKIP_BROWSER_GC = "1"` before installation.
-Windows file protection also requires private per-user ACLs.
+PowerShell에서는 설치 전에 `$env:PLAYWRIGHT_SKIP_BROWSER_GC = "1"`을 설정합니다.
+Windows에서는 파일 보호를 위해 사용자별 비공개 ACL도 적용해야 합니다.
 
-The `dev` extra does not install OpenAI/Anthropic clients. For optional provider
-adapter tests/demos use `--extra llm`; API keys are not required for offline tests.
-Do not overwrite an existing `.env` from an example.
+`dev` 선택 의존성에는 OpenAI·Anthropic 클라이언트가 포함되지 않습니다.
+선택적 제공자 어댑터 테스트·데모에는 `--extra llm`을 사용하세요.
+오프라인 테스트에는 API 키가 필요하지 않습니다. 예제 파일로 기존 `.env`를 덮어쓰지 마세요.
 
-## Testing and changes
+## 수정과 테스트
 
-1. Create a topic branch from current main.
-2. Write a failing regression test using synthetic, non-identifying data.
-3. Run it and verify the intended failure, then make the smallest fix.
-4. Run related tests, then the full offline suite and packaging checks described in
-   [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Do not run all `smoke*.py` scripts.
-5. Update tool contracts, README/setup examples and CHANGELOG for user-visible changes.
-6. Review `git diff --check`, staged files and a secret scan. Open a focused PR with
-   commands/results and clear statements of what was **not** verified.
+1. 최신 main에서 작업용 브랜치를 만듭니다.
+2. 개인을 식별할 수 없는 합성 데이터로 먼저 실패하는 회귀 테스트를 작성합니다.
+3. 의도한 이유로 실패하는지 확인한 뒤, 필요한 최소한의 수정을 적용합니다.
+4. 관련 테스트와 전체 오프라인 테스트를 실행하고,
+   [개발 가이드](docs/DEVELOPMENT.md)의 패키징 검사를 수행합니다.
+   `smoke*.py` 스크립트를 일괄 실행하지 마세요.
+5. 사용자에게 영향을 주는 변경은 도구 계약, README·설정 예제, CHANGELOG에 반영합니다.
+6. `git diff --check`, 커밋 대상 파일, 비밀정보 검사 결과를 확인합니다.
+   PR에는 실행 명령·결과와 **검증하지 못한 범위**를 명시합니다.
 
-Keep unknown inputs, authentication failures, parser errors, partial results and
-verified empty results distinct. Maintain exact identifiers, source URLs, timezones,
-pagination coverage and privacy defaults. Do not make mock success stand in for a
-real site check. Browser tests must intercept fixture traffic and avoid live school
-services unless explicitly authorized.
+미지원 입력, 인증 실패, 파싱 오류, 부분 결과, 원문에서 확인한 빈 결과를 구분하세요.
+식별자·출처 URL·시간대·페이지 수집 범위·개인정보 기본 설정을 보존해야 합니다.
+모의 테스트 성공을 실사이트 검증으로 대신하지 마세요. 브라우저 테스트는 합성 응답을 사용하고,
+명시적으로 승인받지 않았다면 실제 학교 서비스에 접속하지 않아야 합니다.
 
-Real-portal tests use only your authorized account and explicit live gates. Real-LLM
-tests additionally transfer data to the selected provider and can incur charges.
-Never store raw live results, cookies or personally identifying fixtures in a PR.
+실제 포털 테스트는 본인에게 허용된 계정과 명시적 실행 설정을 사용합니다.
+실제 LLM 테스트는 선택한 제공자에게 데이터를 전송하며 비용이 발생할 수 있습니다.
+원시 조회 결과, 쿠키, 개인을 식별할 수 있는 테스트 데이터를 PR에 포함하지 마세요.
 
-## Public API and compatibility
+## 공개 API와 호환성
 
-This is beta software. Keep tool names/normal inputs stable where possible, but
-reject unsafe or unsupported inputs rather than silently broadening a query. Document
-stricter validation and response-field changes so clients can refresh `tools/list`.
-Changes to SSO allowlists require observed school origins and synthetic rejection
-tests; never disable TLS or origin checks to make a test pass.
+현재는 베타 소프트웨어입니다. 가능하면 도구 이름과 정상 입력을 유지하되,
+위험하거나 지원하지 않는 입력을 무시하고 조회 범위를 넓혀서는 안 됩니다.
+입력 검증 강화와 응답 필드 변경은 문서화하여 사용자가 `tools/list`를 갱신할 수 있도록 하세요.
+SSO 허용 목록을 변경할 때는 실제 학교의 출처 확인과 합성 입력 거절 테스트가 필요합니다.
+테스트를 통과시키려고 TLS나 출처 검증을 끄지 마세요.
 
-Do not add submission, enrollment, payment, reservation, cancellation or loan-renewal
-behavior under the read-only label. Propose scope changes separately. Avoid dependency
-upgrades, large formatting churn or unrelated refactors in a bugfix.
+읽기 전용이라는 이름으로 과제 제출, 수강신청, 결제, 예약·취소, 대출 연장을 추가하지 마세요.
+범위 변경은 별도로 제안해야 합니다. 버그 수정에 불필요한 의존성 변경, 대규모 서식 변경,
+관련 없는 리팩토링을 함께 넣지 않는 편이 좋습니다.
 
-## License
+## 문서 언어
 
-By contributing, you represent that you may contribute the material under the
-repository's [MIT license](LICENSE). Preserve existing authorship and license notices.
-Do not add third-party code or university content unless its redistribution rights
-are established. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+사용자·개발자 문서의 설명은 **한국어를 기본**으로 합니다.
+공개 저장소라는 이유로 기존 문서를 영어로 바꾸지 마세요.
+명령어·API 식별자·설정 키·URL은 원문을 유지하고, 번역이 필요하면 별도 문서로 제안합니다.
+표준 라이선스의 법적 원문은 임의로 번역하여 대체하지 않습니다.
+
+## 라이선스
+
+기여자는 제출한 내용을 저장소의 [MIT 라이선스](LICENSE)로 제공할 권한이 있어야 합니다.
+기존 작성자와 라이선스 고지를 보존하세요. 재배포 권한이 확인되지 않은 제3자 코드나 학교 자료는
+추가하지 마세요. 자세한 범위는 [제3자 고지](THIRD_PARTY_NOTICES.md)를 참고하세요.

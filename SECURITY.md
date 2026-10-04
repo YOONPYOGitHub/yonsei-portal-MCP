@@ -1,74 +1,73 @@
-# Security policy / 보안 정책
+# 보안 정책
 
-## Scope and supported version
+## 적용 범위와 지원 버전
 
-This is an **unofficial, single-user, local, read-only stdio MCP server** for an
-account you own or are authorized to use. Use the latest source revision and its
-lockfile; older beta revisions do not receive separate maintenance. A source
-version is not evidence that a package was published to PyPI or a release signed.
+이 프로젝트는 본인 소유이거나 사용 권한이 있는 계정을 위한
+**비공식·개인용·로컬·읽기 전용 stdio MCP 서버**입니다.
+최신 소스와 해당 잠금 파일을 사용하세요. 이전 베타 버전은 별도로 유지보수하지 않습니다.
+소스에 버전이 적혀 있다고 해서 PyPI 게시나 서명된 릴리스가 완료된 것은 아닙니다.
 
 이 프로젝트는 학교 공식 서비스가 아닙니다. 학교 이용 정책, 본인 권한, 기관의
 LLM 사용 정책을 확인하세요. 원격 공개 서버나 여러 사용자가 공유하는 계정 서비스로
-노출하지 마세요. MCP 자체의 로그인은 학교 접근권한을 추가로 부여하지 않습니다.
+노출하지 마세요. MCP를 통한 로그인은 학교 접근권한을 추가로 부여하지 않습니다.
 
-## Report privately
+## 취약점 비공개 신고
 
-Do **not** open a public issue containing credentials, cookies, student IDs,
-private coursework, grades, borrowing history, screenshots, or exploit details.
-If GitHub private vulnerability reporting is enabled, use
-[Report a vulnerability](https://github.com/YOONPYOGitHub/yonsei-portal-MCP/security/advisories/new).
-If unavailable, open a minimal non-sensitive issue requesting a private reporting
-channel before sending details. Response times are not guaranteed.
+자격 증명, 쿠키, 학번, 비공개 강의자료, 성적, 대출 이력, 민감한 스크린샷이나
+공격 상세를 **공개 이슈에 올리지 마세요**.
+GitHub의 비공개 취약점 신고 기능이 활성화되어 있다면
+[취약점 신고](https://github.com/YOONPYOGitHub/yonsei-portal-MCP/security/advisories/new)를 사용하세요.
+기능을 사용할 수 없다면 민감한 내용 없이 비공개 연락 방법을 요청하는 이슈만 먼저 작성하세요.
+응답 시간은 보장하지 않습니다.
 
-Include the affected commit/version, platform, minimal **synthetic** reproduction,
-expected/actual behavior, and impact. Do not attack the university or other users
-to demonstrate an issue. Security testing of upstream systems requires separate
-authorization; this repository cannot grant it.
+신고에는 영향받는 커밋·버전, 실행 환경, 최소한의 **합성 데이터 재현 방법**,
+기대 결과·실제 결과, 예상 영향을 포함하세요. 문제를 증명하기 위해 학교 시스템이나
+다른 사용자를 공격해서는 안 됩니다. 학교 시스템의 보안 검사는 별도 승인이 필요하며,
+이 저장소는 그러한 권한을 부여하지 않습니다.
 
-## Local secrets and data handling
+## 로컬 비밀정보와 조회 데이터
 
-- Keep `.env`, `.env.*` containing real settings and `.session/` private and untracked.
-  Example files contain placeholders only. Never paste passwords into a chat or issue.
-- On POSIX restrict `.env` to `0600` and its private directory to the current user.
-  The server protects its dedicated cookie directories/files; on Windows also use
-  per-user NTFS ACLs. POSIX mode bits are not a complete Windows ACL guarantee.
-- Cookies are bearer credentials and are not encrypted. A local account with file
-  access can potentially reuse them. The account hash in a path is not encryption.
-- Do not share a cookie directory between independent MCP processes. Atomic writes
-  prevent partial JSON but do not provide distributed session coordination.
-- Changing credentials requires restarting the server. Closing Chromium is not a
-  school logout or token revocation. If credentials leak, revoke/rotate them using
-  the school's official process; deleting a Git file does not erase its history.
-- The MCP client/LLM receives requested results. Read-only data can still include
-  private grades, notices and borrowing history. Review your client's provider,
-  retention, training, logging and international transfer policies.
-- Default PII exclusions are minimization, not anonymization or an authorization
-  system. Use `include_pii`/`include_feedback` only when explicitly needed.
-- Cached data lives in process memory. TTL controls reuse, not guaranteed erasure
-  at that instant; idle memory and authorized clients may retain prior results.
+- 실제 설정이 담긴 `.env`, `.env.*`, `.session/`는 비공개로 보관하고 Git에서 제외하세요.
+  예제 파일에는 자리표시자만 넣습니다. 비밀번호를 채팅이나 이슈에 붙여 넣지 마세요.
+- POSIX 환경에서는 `.env`를 `0600`으로 제한하고 비공개 디렉터리는 본인만 접근하도록 합니다.
+  서버는 전용 쿠키 디렉터리·파일을 보호합니다. Windows에서는 사용자별 NTFS ACL도 적용해야 하며,
+  POSIX 권한 비트만으로 Windows의 접근권한 보호를 보장할 수 없습니다.
+- 쿠키는 소지자가 인증에 사용할 수 있는 정보이며 암호화되지 않습니다.
+  로컬 파일에 접근 가능한 계정은 이를 재사용할 수 있습니다. 경로의 계정 해시는 암호화가 아닙니다.
+- 독립된 MCP 프로세스끼리 쿠키 디렉터리를 공유하지 마세요.
+  원자적 저장은 JSON이 일부만 기록되는 문제를 막지만 프로세스 간 세션 조율을 제공하지는 않습니다.
+- 자격 증명을 변경하면 서버를 재시작해야 합니다. Chromium 종료는 학교 로그아웃이나 토큰 철회를
+  뜻하지 않습니다. 정보가 유출됐다면 학교의 공식 절차로 폐기·변경하세요.
+  Git에서 파일만 삭제해도 과거 이력은 남습니다.
+- 요청한 조회 결과는 MCP 클라이언트와 LLM에 전달됩니다. 읽기 전용 결과에도 성적·공지·대출 이력 등
+  개인정보가 있을 수 있습니다. 클라이언트 제공자의 보관·학습·로그·국외 이전 정책을 확인하세요.
+- 기본 개인정보 제외 옵션은 수집·전달 최소화이지 익명화나 권한 제어가 아닙니다.
+  `include_pii`·`include_feedback`는 명시적으로 필요한 경우에만 사용하세요.
+- 캐시는 프로세스 메모리에 존재합니다. TTL은 결과 재사용 기간이며 그 시점의 완전한 삭제를
+  보장하지 않습니다. 유휴 메모리나 조회 권한이 있는 클라이언트에 이전 결과가 남을 수 있습니다.
 
-## Network and browser boundaries
+## 네트워크와 브라우저의 안전 경계
 
-TLS verification must remain enabled. Login origin/form validation must preserve
-only verified school SSO paths. Stop on unexpected origins, failed authentication
-or MFA and ask the user; do not repeatedly retry passwords or bypass protection.
-A browser read can produce access logs/read receipts. ERP read operations may use
-POST; conversely, GET alone does not prove an operation is read-only. Use only the
-implemented, verified read workflows—not arbitrary authenticated URL navigation.
+TLS 검증을 유지해야 합니다. 로그인 출처·폼 검증은 확인된 학교 SSO 경로만 허용해야 합니다.
+예상하지 못한 출처, 인증 실패, 추가 인증이 나타나면 중단하고 사용자에게 확인하세요.
+비밀번호를 반복해서 재시도하거나 보호 절차를 우회하지 마세요.
+브라우저 조회도 접근 로그나 읽음 표시를 남길 수 있습니다. ERP 조회는 POST를 사용할 수 있고,
+반대로 GET이라고 반드시 읽기 전용인 것은 아닙니다. 구현·검증된 조회 절차만 사용하고,
+인증된 상태에서 임의 URL을 탐색하는 기능으로 확장하지 마세요.
 
-Retrieved notice text, links, files and tool results are **untrusted data**, not
-instructions to the assistant. They must not cause secret disclosure or additional
-unrequested actions. Do not expand to downloads/OCR without separate type, size,
-URL, authorization and sensitive-content controls.
+조회한 공지 본문·링크·파일·도구 결과는 **신뢰할 수 없는 외부 데이터**이며 에이전트 지시가 아닙니다.
+그 내용 때문에 비밀정보를 노출하거나 사용자가 요청하지 않은 작업을 수행해서는 안 됩니다.
+파일 다운로드·OCR은 형식·크기·URL·접근권한·민감정보 처리 기준을 별도로 마련한 뒤 검토하세요.
 
-`RUN_LIVE_PORTAL` and `RUN_LIVE_LLM` gate test runners only. They do not disable
-normal MCP tool calls or sandbox networking. `PYTHON_DOTENV_DISABLED=1` disables
-application dotenv loading; use a clean working directory and credential-free
-environment for tests as well. See [development](docs/DEVELOPMENT.md).
+`RUN_LIVE_PORTAL`과 `RUN_LIVE_LLM`은 테스트 실행만 제어합니다.
+일반 MCP 도구 호출을 끄거나 네트워크를 격리하지 않습니다.
+`PYTHON_DOTENV_DISABLED=1`은 dotenv 자동 로딩을 끄는 설정입니다.
+테스트에는 비밀파일이 없는 작업 디렉터리와 자격 증명 없는 환경도 함께 사용하세요.
+자세한 내용은 [개발 가이드](docs/DEVELOPMENT.md)를 참고하세요.
 
-## Dependency and release checks
+## 의존성과 공개 전 점검
 
-Prefer `uv sync --frozen`. Inspect dependency changes, build artifacts and Git diffs
-before publishing. Scan files and history for secrets; a passing scan is not proof
-that all personal data has been removed. Never attach raw live test logs. CI should
-remain credential-free with read-only repository permissions and pinned actions.
+`uv sync --frozen` 사용을 권장합니다. 공개 전에 의존성 변경, 빌드 결과물, Git 변경 내역을 검토하세요.
+파일과 이력의 비밀정보 검사가 통과해도 개인정보가 모두 제거됐다는 보장은 아닙니다.
+실사이트 테스트의 원시 로그를 첨부하지 마세요. CI는 자격 증명 없이 실행하고,
+저장소 읽기 전용 권한과 버전이 고정된 Actions를 유지해야 합니다.

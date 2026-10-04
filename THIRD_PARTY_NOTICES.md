@@ -1,38 +1,36 @@
-# License and third-party notices
+# 라이선스 및 제3자 고지
 
-## Project code and documentation
+## 프로젝트 코드와 문서
 
-The project is licensed under the [MIT License](LICENSE), copyright
-(c) 2026 yoonpyohong. Keep the copyright and permission notice in copies or
-substantial portions. This update preserves that license and attribution; it does
-not relicense third-party works. Installed package metadata declares SPDX `MIT`
-and includes the license file.
+이 프로젝트에는 [MIT 라이선스](LICENSE)가 적용되며,
+저작권 표기는 `Copyright (c) 2026 yoonpyohong`입니다.
+복사본이나 상당 부분을 재배포할 때 저작권·허가 고지를 보존해야 합니다.
+이번 변경은 기존 라이선스와 작성자 표기를 유지하며, 제3자 저작물의 라이선스를 변경하지 않습니다.
+설치 패키지의 메타데이터에는 SPDX 식별자 `MIT`가 선언되고 라이선스 파일이 포함됩니다.
+법적 라이선스 원문인 `LICENSE`는 영어 표준 문구를 그대로 유지합니다.
 
-## University names, content and screenshots
+## 학교 명칭·콘텐츠·스크린샷
 
-Yonsei University, LearnUs and related names/logos identify the services with which
-this independent project interoperates. They do not imply endorsement, sponsorship
-or official support. No trademark rights are granted by this repository's license.
+연세대학교, LearnUs 및 관련 명칭·로고는 이 독립 프로젝트가 연동하는 서비스를 식별하기 위한 것입니다.
+학교의 승인·후원·공식 지원을 의미하지 않으며, 저장소 라이선스는 상표권 사용 권한을 부여하지 않습니다.
 
-University pages, notices, course materials and service UI shown in documentation
-remain subject to their owners' rights and applicable terms. The MIT license does
-not grant permission to republish those materials or personal student data. Example
-screenshots are documentation, not permission to redistribute underlying course
-content. Do not submit screenshots or transcripts containing private information.
+문서에 표시된 학교 페이지·공지·강의자료·서비스 화면은 각 권리자의 권리와 이용 조건을 따릅니다.
+MIT 라이선스는 이러한 자료나 학생 개인정보를 재게시할 권한을 부여하지 않습니다.
+예제 스크린샷은 사용 설명을 위한 것이며, 화면에 등장하는 강의 콘텐츠를 재배포할 수 있다는 뜻이 아닙니다.
+비공개 정보가 포함된 스크린샷이나 대화 기록을 제출하지 마세요.
 
-## Dependencies
+## 의존성
 
-Third-party Python packages and Chromium/Playwright components retain their own
-licenses. Consult each installed distribution's license metadata and upstream
-project before redistribution. The MIT license for this project does not replace
-those licenses. The lockfile records dependency versions; dependencies are not
-vendored into the project's wheel.
+제3자 Python 패키지와 Chromium·Playwright 구성요소에는 각각의 라이선스가 적용됩니다.
+재배포 전에 설치한 배포본의 라이선스 메타데이터와 원본 프로젝트를 확인하세요.
+이 프로젝트의 MIT 라이선스는 해당 의존성의 라이선스를 대신하지 않습니다.
+잠금 파일에는 의존성 버전이 기록되며, 의존성 코드 자체를 프로젝트 wheel에 포함하지는 않습니다.
 
-## Bundled public certificate
+## 포함된 공개 인증서
 
-`src/yonsei_portal_mcp/_certs/sectigo_ov_intermediate.pem` is a public Sectigo
-intermediate CA certificate, not a private key or credential. It supplements the
-verified TLS trust chain for an upstream missing intermediate; TLS checks remain
-active. It does not contain project code and must not be treated as a grant of
-Sectigo trademark rights or as an endorsement. Certificate validity and upstream
-chain changes must be reviewed when updating it.
+`src/yonsei_portal_mcp/_certs/sectigo_ov_intermediate.pem`은 공개된 Sectigo 중간 CA 인증서이며,
+개인 키나 로그인 자격 증명이 아닙니다. 중간 인증서를 누락한 원천 서버의 TLS 인증서 체인을
+검증할 수 있도록 보완하는 용도이며, TLS 검증은 계속 활성화됩니다.
+
+이 인증서는 프로젝트 코드가 아니며 Sectigo 상표권의 허가나 보증을 뜻하지 않습니다.
+인증서를 갱신할 때는 유효기간과 원천 서버의 인증서 체인 변경을 확인해야 합니다.

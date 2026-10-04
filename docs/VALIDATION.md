@@ -1,4 +1,4 @@
-# Validation record — 0.5.0b2
+# 검증 기록 — 0.5.0b2
 
 검증일: **2026-10-04**. 이 기록은 아래 실행 범위의 결과이며 전 계정·전 OS·모든 답변의
 정확성이나 무취약점을 보증하지 않습니다. 저장소의 코드/잠금 파일과 함께 읽으세요.
@@ -51,7 +51,7 @@ Playwright 1.60.0/Chromium에서 수행했다. 각 의존성의 모든 허용 �
 
 ## 검증 경계
 
-- Live tests의 성공은 단일 계정·해당 시점 표본의 성공이다. 빈 시험·장학·대출/예약 이력 응답은
+- 실사이트 테스트의 성공은 단일 계정·해당 시점 표본의 성공이다. 빈 시험·장학·대출/예약 이력 응답은
   비어 있지 않은 모든 원문 형식의 검증을 대신하지 못한다.
 - Windows 로그인/NTFS ACL, 다중 프로세스의 동일 쿠키 경로 공유, 전 학교 계정/캠퍼스 및
   사이트 변경 후 동작은 별도 검증이 필요하다.
@@ -66,12 +66,12 @@ Playwright 1.60.0/Chromium에서 수행했다. 각 의존성의 모든 허용 �
 상세 환경 준비·격리·라이브 승인 규칙은 [DEVELOPMENT.md](DEVELOPMENT.md)를 참고하세요.
 
 ```bash
-# Credential-free development checkout / environment
+# 자격 증명 없는 개발 체크아웃·환경
 uv sync --frozen --extra dev
 PYTHON_DOTENV_DISABLED=1 RUN_LIVE_PORTAL=0 RUN_LIVE_LLM=0 \
   uv run --offline --no-sync python -m pytest -m "not live" -p no:cacheprovider -q
 
-# Only after authorization for the configured account; no external LLM calls
+# 설정된 계정의 사용 승인을 받은 경우에만 실행하며 외부 LLM은 호출하지 않음
 RUN_LIVE_PORTAL=1 RUN_LIVE_LLM=0 \
   uv run --no-sync python -m pytest tests/test_live_tools.py -x -q --tb=no --show-capture=no
 ```
