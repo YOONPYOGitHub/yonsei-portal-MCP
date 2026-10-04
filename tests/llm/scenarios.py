@@ -25,12 +25,9 @@ import os
 import sys
 import time
 
-try:
-    from dotenv import load_dotenv
+from .env import load_harness_env
 
-    load_dotenv(override=False)
-except ImportError:  # pragma: no cover
-    pass
+load_harness_env()
 
 from .mcp_host import agent_run_error, run_agent, stdio_client_session
 from .providers import ProviderUnavailable, make_provider

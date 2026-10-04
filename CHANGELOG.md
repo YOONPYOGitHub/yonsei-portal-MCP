@@ -2,9 +2,37 @@
 
 이 프로젝트의 주요 변경 사항을 기록합니다. 형식은
 [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)을 따르며,
-Python 패키지 버전은 [PEP 440](https://peps.python.org/pep-0440/)의 베타 표기(`0.5.0b2`)를 사용합니다.
+Python 패키지 버전은 [PEP 440](https://peps.python.org/pep-0440/)의 베타 표기(`0.6.0b1`)를 사용합니다.
 
 ## [Unreleased]
+
+## [0.6.0b1] - 2026-10-05
+
+- 학교 설정 `.env`와 선택적 LLM 하네스 설정 `.env.llm`을 분리. 명시적 LLM 실행 허용 시에만 후자를 읽으며 일반 MCP는 `.env`만 사용. 기존 단일 `.env`와 실행 환경변수 우선순위 유지.
+- 예제에 대표 MCP 클라이언트, `LLM_PROVIDER`의 네 지원값과 제공자별 필수/선택 항목·보안·실행 허용 규칙을 명시.
+
+소스 베타의 변경 기록입니다. PyPI 게시·GitHub Release 생성이나 원격 CI 성공을 의미하지 않습니다.
+
+### 공개 공지
+- `list_notice_sources`, `get_university_notices`, `get_university_notice` 추가. 로그인·브라우저 없이 등록된 `university`(대학 공지), `graduate`(일반대학원 교내공지), `ai_graduate`(인공지능융합대학원 공지)를 구분해 조회. 임의 URL·다른 대학원 탐색은 지원하지 않음.
+- 목록은 서버 page 1~1000, 현재 페이지 출력 limit 1~100(기본 10). 잘린 결과는 `same_page_request`로 먼저 확장한 뒤 `next_request` 사용. `has_next=null`을 마지막 페이지로 오인하지 않으며 고정글 반복·`complete_history=false`로 수집 범위를 명시.
+- 본문 식별자·출처·수집시각과 허용된 첨부 링크 제공. 첨부 다운로드·이미지 OCR·전체 이력 완전성 보장은 제외.
+
+### LearnUs 게시판
+- `get_lms_board_posts`에 기본 page 1, 범위 1~100 추가. 활성 페이지·연속된 다음 링크 검증과 `next_request`·페이지 상한 표시 제공. 기존 board_id 단독 호출 유지.
+- `search_lms_board_posts` 추가. 선택 게시판 첫 페이지부터 제목만 검색하며 기본 3·최대 10페이지, 기본 limit 20·최대 50. 고정글 ID 중복 제거와 검색 페이지·일치 수·잘림·후속 페이지 정보를 제공. 작성자·본문·숨김/링크 없는 글은 검색하지 않음.
+- 기존 `get_lms_notices`·`search_notices`는 홈에 표시된 공지 범위를 유지. 선택 본문은 `get_notice`로 별도 조회.
+- 공개 도구 **38개**: LearnUs 15·도서관 10·ERP 6·일정 4·공개 공지 3. 기존 도구 이름을 유지하며 업데이트 후 클라이언트의 `tools/list`를 갱신해야 함.
+
+### 설치 진단
+- `yonsei-portal-mcp doctor` 및 모듈 진입점의 doctor 추가. 설치·패키지 버전·Chromium 실행 파일과 실제 무인증 stdio 초기화/목록 검사. 기본 MCP 실행 명령은 변경하지 않음.
+- 기본 진단은 `.env` 내용·쿠키를 읽거나 로그인·포털·외부 LLM을 호출하지 않음. `--env-file`로 명시한 파일의 자격 증명 존재 여부·출처만 출력하고 비밀값은 출력하지 않음. `--browser`는 임시·격리 Chromium의 빈 페이지 시작만 확인.
+- `--json`, 검사별 `--timeout`, 종료 코드 0(필수 로컬 점검 성공)/1(필수 점검 실패)/2(인자·지정 설정 오류). 자격 증명·Chromium은 기본 선택 사항이며 성공이 실제 로그인이나 보안 감사 통과를 뜻하지 않음.
+
+### CI와 보안 자동화
+- 기존 Linux/Python 3.10·3.11·3.12, macOS/Python 3.11에 네이티브 Windows/Python 3.11을 더해 5개 조합 구성. OS별 Chromium·wheel Python 경로와 이식 가능한 pytest 설정 파일 사용. 새 Windows runner의 실제 실행·로그인·NTFS ACL 검증은 아직 확인되지 않음.
+- 별도 Security workflow를 push·PR·주간·수동 실행으로 구성. 잠금 런타임 의존성의 pip-audit와 전체 Git 이력·현재 공개 트리의 비식별 Gitleaks 검사. 읽기 전용 권한·고정된 도구/Action 버전·보고서 비업로드 유지. 구성만으로 실제 CI 통과를 주장하지 않음.
+- macOS·Linux·WSL·Windows 설치 안내와 진단·공지 계약 갱신. 기존 문서의 언어·문체 및 영어 법적 원문을 유지하도록 기여 원칙 정리. 실제 검증 범위는 [검증 기록](docs/VALIDATION.md)에서 별도로 관리.
 
 ## [0.5.0b2] - 2026-10-04
 

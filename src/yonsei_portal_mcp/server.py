@@ -27,7 +27,7 @@ from pydantic import ValidationError
 
 from . import cache, ics
 from .config import load_settings
-from .scrapers import academic, boards, erp, facilities, learnus, library, seats
+from .scrapers import academic, boards, erp, facilities, learnus, library, seats, university
 from .session import close_sessions, get_erp_session, get_library_session, get_session, validate_session_settings
 
 
@@ -830,16 +830,78 @@ async def get_lms_boards(course_id: str) -> dict:
 
 
 @mcp.tool(annotations=_READ_ONLY)
-async def get_lms_board_posts(board_id: str) -> dict:
-    """get_lms_boards가 반환한 board_id로 강좌 게시글 목록 첫 페이지를 읽습니다.
+async def get_lms_board_posts(board_id: str, page: int = 1) -> dict:
+    """get_lms_boards가 반환한 board_id의 게시글 페이지를 읽습니다.
 
-    posts는 post_id, title, date_raw, url입니다. 작성자·본문·링크 없는 글의 제목은
-    수집하지 않으며 unlinked_count로 제외 수만 제공합니다. count는 공개 링크가 있는
-    반환 건수이고 전체 글 수가 아닙니다. has_pagination이면 후속 페이지는 미수집입니다.
-    글 작성·수정·삭제는 하지 않습니다. 출처·수집시각과 5분 계정 캐시를 제공합니다.
+    page는 1~100이며 원문의 활성 페이지와 다음 링크를 검증합니다.
+    posts는 post_id, title, date_raw, url이고 작성자·본문·링크 없는 제목은 제외합니다.
+    count는 반환 건수, unlinked_count는 링크 없는 행 수이며 전체 글 수가 아닙니다.
+    has_next와 next_request(board_id/page)로 이어 읽을 수 있습니다. 마지막 페이지라도
+    앞 페이지를 모두 수집했다는 뜻은 아닙니다. source_url/fetched_at, 5분 계정·페이지 캐시.
     """
     boards.validate_id(board_id)
+    boards.validate_page(page)
     return await cache.cached(
-        ("get_lms_board_posts", _account(), board_id), cache.NOTICES_TTL,
-        lambda: get_session().run(lambda page: boards.fetch_posts(page, board_id)),
+        ("get_lms_board_posts", _account(), board_id, page), cache.NOTICES_TTL,
+        lambda: get_session().run(lambda browser_page: boards.fetch_posts(browser_page, board_id, page)),
+    )
+
+
+@mcp.tool(annotations=_READ_ONLY)
+async def search_lms_board_posts(board_id: str, query: str, max_pages: int = 3, limit: int = 20) -> dict:
+    """선택한 LearnUs 게시판의 여러 페이지에서 제목을 검색합니다.
+
+    get_lms_boards가 반환한 board_id를 사용합니다. query 1~200자, max_pages 1~10,
+    limit 1~50. 첫 페이지부터 순차 조회하며 공백으로 나눈 모든 단어가 포함된 제목만
+    반환합니다. 본문·작성자·링크 없는 글은 검색하지 않습니다. scanned_pages,
+    matching_count, has_more_pages, result_truncated로 검색 범위와 누락 가능성을
+    표시합니다. 고정글 ID 중복 제거. 본문은 반환 URL을 get_notice로 별도 조회합니다.
+    최대 max_pages회의 게시판 읽기 요청, 5분 계정·검색 조건 캐시입니다.
+    """
+    boards.validate_search(board_id, query, max_pages, limit)
+    return await cache.cached(
+        ("search_lms_board_posts", _account(), board_id, query, max_pages, limit), cache.NOTICES_TTL,
+        lambda: get_session().run(lambda page: boards.search_posts(page, board_id, query, max_pages, limit)),
+    )
+
+
+@mcp.tool(annotations=_READ_ONLY)
+async def list_notice_sources() -> dict:
+    """로그인 없이 공식 공지 소스 목록을 반환합니다. 네트워크 요청은 없습니다.
+
+    university(대학 전체), graduate(일반대학원), ai_graduate(인공지능융합대학원).
+    각 소속과 적용 범위가 다르므로 공통 공지를 특정 과정의 규정으로 단정하지 마세요.
+    """
+    return university.list_sources()
+
+
+@mcp.tool(annotations=_READ_ONLY)
+async def get_university_notices(source: str = "university", page: int = 1, limit: int = 10) -> dict:
+    """선택한 공식 학교·대학원 공지 페이지를 로그인 없이 읽습니다.
+
+    source는 list_notice_sources의 식별자. page 1~1000, limit 1~100(출력 상한).
+    notices의 notice_id/title/date_raw/url/pinned와 출처·수집시각·pagination 반환.
+    truncated이면 same_page_request로 현재 페이지를 먼저 확장하고 next_request로
+    이어 읽으세요. has_next=null은 미확인이지 마지막 페이지가 아닙니다. 고정글은
+    페이지마다 반복될 수 있으며 count는 반환 수이지 전체 이력이 아닙니다. 5분 캐시.
+    """
+    university.validate_list(source, page, limit)
+    return await cache.cached(
+        ("get_university_notices", source, page, limit), cache.NOTICES_TTL,
+        lambda: university.fetch_notices(source, page, limit),
+    )
+
+
+@mcp.tool(annotations=_READ_ONLY)
+async def get_university_notice(source: str, notice_id: str) -> dict:
+    """선택한 공식 학교·대학원 공지의 공개 본문을 로그인 없이 읽습니다.
+
+    source와 notice_id는 get_university_notices가 반환한 값을 그대로 사용합니다.
+    제목·작성일·본문·출처·수집시각과 검증된 첨부 링크만 반환합니다.
+    첨부파일 다운로드·이미지 OCR은 수행하지 않습니다. 5분 캐시입니다.
+    """
+    university.validate_detail(source, notice_id)
+    return await cache.cached(
+        ("get_university_notice", source, notice_id), cache.NOTICES_TTL,
+        lambda: university.fetch_notice(source, notice_id),
     )

@@ -1,13 +1,14 @@
 # Yonsei Portal MCP
 
 연세대학교 LearnUs·학사행정(ERP)·도서관 정보를 MCP 클라이언트에서 조회하는 **개인용 읽기 전용 서버**입니다.
-현재 강좌, 마감, 출석, 성적, 시간표, 게시판, 도서·좌석·세미나룸 현황과 학사일정을 34개 도구로 제공합니다.
+현재 강좌, 마감, 출석, 성적, 시간표, 게시판, 도서·좌석·세미나룸 현황, 학사일정과 공개 학교·대학원 공지를 38개 도구로 제공합니다.
 인증 조회와 홈페이지 좌석 표는 Playwright Chromium, 나머지 공개 조회는 HTTP를 사용합니다. 웹 UI나 원격 HTTP MCP 서비스가 아니라 **로컬 stdio 프로세스**입니다.
 
-[사용 가이드·실제 캡처](docs/USAGE.md) · [질문 예시](#이렇게-물어보세요) · [전체 기능 34개](#지원-기능-전체-목록) · [설치](#빠른-시작) · [클라이언트 연결](#클라이언트-연결) · [API 참조](docs/TOOLS.md)
+[사용 가이드·실제 캡처](docs/USAGE.md) · [질문 예시](#이렇게-물어보세요) · [전체 기능 38개](#지원-기능-전체-목록) · [설치](#빠른-시작) · [클라이언트 연결](#클라이언트-연결) · [API 참조](docs/TOOLS.md)
 
 **본인에게 허용된 계정을 위한 비공식·로컬·읽기 전용 연세대 MCP입니다.**
-LLM은 연결한 클라이언트에서 제공하므로 이 서버에 별도 LLM API 키를 설정할 필요가 없습니다.
+LLM은 Claude Desktop·Claude Code·VS Code(GitHub Copilot) 같은 연결 클라이언트에서 제공하므로 이 서버에 별도 LLM API 키를 설정할 필요가 없습니다.
+일반 사용은 `.env`의 학교 설정만 준비합니다. 선택적인 개발용 LLM 테스트·데모만 `.env.llm`을 추가로 사용하며, 제공자 선택과 로딩 우선순위는 [개발 가이드](docs/DEVELOPMENT.md#5-llm-하네스-일반-mcp-실행과-별개)를 확인하세요.
 Python 3.10 이상과 uv가 필요하며, 로그인 조회에는 Playwright Chromium도 필요합니다.
 [보안 정책](SECURITY.md), [기여 안내](CONTRIBUTING.md),
 [라이선스·제3자 고지](THIRD_PARTY_NOTICES.md)를 확인하세요.
@@ -31,6 +32,8 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 | 학교 일정 확인 | 현재 공개된 학사일정에서 수강철회 기간을 찾아줘. | 불필요 | [학사일정](docs/TOOLS.md#get_academic_calendar) |
 | 학습 현황 한 번에 보기 | LearnUs의 현재 강좌, 다가오는 마감, 강좌 공지를 정리해줘. | 필요 | [학습 종합 조회](docs/TOOLS.md#get_lms_overview) |
 | 과제 제출 여부 확인 | 현재 강좌의 과제 목록을 보고 각 과제의 제출 상태와 채점 상태를 확인해줘. | 필요 | [과제 목록](docs/TOOLS.md#get_lms_assignments) + [제출상태](docs/TOOLS.md#get_lms_assignment_status) |
+| 공개 대학원 공지 확인 | 인공지능융합대학원 공지 목록에서 관련 글을 골라 본문과 첨부 링크를 알려줘. | 불필요 | [공개 공지](docs/TOOLS.md#get_university_notices) + [공개 본문](docs/TOOLS.md#get_university_notice) |
+| 게시판 제목 검색 | 선택한 LearnUs 강좌 게시판의 첫 3페이지에서 중간시험 관련 제목을 찾아줘. | 필요 | [게시판 검색](docs/TOOLS.md#search_lms_board_posts) |
 | 공지 찾기·내용 확인 | LearnUs 강좌 공지에서 중간시험 관련 제목을 찾아 본문을 정리해줘. | 필요 | [공지 검색](docs/TOOLS.md#search_notices) + [공지 본문](docs/TOOLS.md#get_notice) |
 | 수업 장소 확인 | 내 시간표를 요일별로 정리하고 강의실과 교시를 보여줘. | 필요 | [시간표](docs/TOOLS.md#get_my_timetable) |
 | 성적 확인 | 2025년 2학기 과목 성적을 보여주고, 누적 평점은 따로 표시해줘. | 필요 | [ERP 성적](docs/TOOLS.md#get_grades) |
@@ -51,10 +54,10 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 
 ## 지원 기능 전체 목록
 
-**LearnUs 14개 · 도서관 10개 · 학사행정 6개 · 일정 4개 = 34개.** 도구 이름을 누르면 입력·반환값·제약을 볼 수 있습니다.
+**LearnUs 15개 · 도서관 10개 · 학사행정 6개 · 일정 4개 · 공개 공지 3개 = 38개.** 도구 이름을 누르면 입력·반환값·제약을 볼 수 있습니다.
 `필요`는 본인 학교 계정과 Chromium이 필요하다는 뜻입니다. 공개 조회는 로그인 불필요이며, 홈페이지 좌석 표는 화면 렌더링을 위해 Chromium을 사용합니다.
 
-### LearnUs (14개)
+### LearnUs (15개)
 
 | 기능 | MCP 도구 | 학교 로그인 |
 | --- | --- | --- |
@@ -71,9 +74,22 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 | 수집된 공지 제목·강좌·유형 키워드 검색 | [search_notices](docs/TOOLS.md#search_notices) | 필요 |
 | LearnUs·도서관 공지 본문 텍스트 | [get_notice](docs/TOOLS.md#get_notice) | LearnUs 필요 / 도서관 불필요 |
 | 강좌 게시판 목록 | [get_lms_boards](docs/TOOLS.md#get_lms_boards) | 필요 |
-| 게시판 첫 페이지의 글 제목·날짜·링크 | [get_lms_board_posts](docs/TOOLS.md#get_lms_board_posts) | 필요 |
+| 게시판의 선택 페이지 글 제목·날짜·링크 (1~100페이지) | [get_lms_board_posts](docs/TOOLS.md#get_lms_board_posts) | 필요 |
+| 선택 게시판의 제한된 페이지 제목 검색 | [search_lms_board_posts](docs/TOOLS.md#search_lms_board_posts) | 필요 |
 
 자료·영상·제출물은 다운로드하지 않습니다. LMS 점수는 ERP 성적과 별개이며, 과거강좌는 화면의 표시 범위입니다.
+
+게시판 검색은 기본 3페이지(최대 10페이지)의 링크 있는 제목만 검색합니다. 본문·작성자·숨김 행은 검색하지 않습니다. 기존 `get_lms_notices`와 `search_notices`는 여전히 홈에 표시된 공지 범위입니다.
+
+### 공개 학교·대학원 공지 (3개)
+
+| 기능 | MCP 도구 | 학교 로그인 |
+| --- | --- | --- |
+| 지원하는 공식 공지 소스 목록 | [list_notice_sources](docs/TOOLS.md#list_notice_sources) | 불필요 |
+| 선택 소스의 공지 페이지 목록 | [get_university_notices](docs/TOOLS.md#get_university_notices) | 불필요 |
+| 선택 공지 본문·첨부 링크 | [get_university_notice](docs/TOOLS.md#get_university_notice) | 불필요 |
+
+`university`(대학 공지), `graduate`(일반대학원 교내공지), `ai_graduate`(인공지능융합대학원 공지)는 적용 대상이 다릅니다. 등록된 소스만 지원하며 임의 URL·다른 대학원까지 조회하지 않습니다. `limit`은 현재 페이지 출력 상한이므로 잘린 경우 `same_page_request`로 먼저 확장합니다. `has_next=null`은 다음 페이지 미확인이고 전체 이력 수집을 보장하지 않습니다. 첨부는 링크만 반환하며 다운로드·이미지 OCR은 하지 않습니다.
 
 ### 도서관 (10개)
 
@@ -104,7 +120,7 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 | 본인 장학수혜내역 | [get_scholarship_history](docs/TOOLS.md#get_scholarship_history) | 필요 |
 | 교과목명·연도·학기·캠퍼스별 수강편람 | [search_courses](docs/TOOLS.md#search_courses) | 필요 |
 
-프로필의 이름·학번은 기본 제외합니다. 장학금 모집 공고·강의계획서·수강 정원 조회·수강신청은 지원하지 않습니다. 시험 조회기간 미등록은 시험 없음과 다릅니다.
+프로필의 이름·학번은 기본 제외합니다. ERP 도구는 장학금 모집 공고·강의계획서·수강 정원 조회·수강신청을 지원하지 않습니다. 등록된 공개 게시판의 공지는 별도 공개 공지 도구로 조회하며 장학 공고 전체 검색이나 마감 통합은 아닙니다. 시험 조회기간 미등록은 시험 없음과 다릅니다.
 
 ### 일정·내보내기 (4개)
 
@@ -121,13 +137,13 @@ MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는
 
 ## 빠른 시작
 
-현재 소스 버전은 **0.5.0b2 공개 베타**입니다. [변경·호환성 안내](CHANGELOG.md)를 먼저 확인하세요. PyPI 게시·GitHub Release와는 별개이며 아래 소스 설치로 사용할 수 있습니다.
+현재 소스 버전은 **0.6.0b1 공개 베타**입니다. [변경·호환성 안내](CHANGELOG.md)를 먼저 확인하세요. PyPI 게시·GitHub Release와는 별개이며 아래 소스 설치로 사용할 수 있습니다.
 의존성은 `mcp>=1.28.1,<2`로 제한합니다. `uv sync --frozen`은 SDK 1.30.0을 사용하고,
 별도 wheel 설치에서도 호환되지 않는 SDK 2.x는 선택되지 않습니다.
 
 ### 1. 실행 환경 준비
 
-- Python **3.10 이상**: Linux/WSL의 3.10·3.11·3.12에서 오프라인 회귀와 wheel 설치를 검증했습니다. 실제 포털 검증은 3.12 중심이며 다른 OS/버전 전체 검증은 아닙니다.
+- Python **3.10 이상**: macOS·Linux·WSL·네이티브 Windows에서 같은 소스 설치 명령을 사용합니다. CI는 Linux 3.10·3.11·3.12, macOS 3.11, Windows 3.11의 5개 조합으로 구성합니다. 네이티브 Windows runner는 새로 구성한 상태이며 실제 실행·로그인·ACL 검증 완료를 뜻하지 않습니다. 버전별 실행 근거는 [검증 기록](docs/VALIDATION.md)을 확인하세요.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/)와 Git.
 - 로그인 조회: 유효한 본인 계정, Chromium, 필요시 브라우저 창을 표시할 데스크톱 환경.
 - 도서 검색·공지·학사일정만 사용: 학교 자격 증명과 Chromium 설치 생략 가능. 공개 홈페이지 좌석 표는 로그인 없이 Chromium이 필요합니다.
@@ -177,41 +193,24 @@ SDK와 의존성의 보안 수정은 잠금 파일에 포함되므로 소스만 
 
 ### 3. 연결 전 무인증 점검
 
-저장소 루트에서 아래 명령을 실행하면 서버를 시작해 도구 목록만 읽습니다. 학교·외부 LLM 호출이나 브라우저 기동은 하지 않습니다.
-정상 출력은 `34 tools available`입니다. 설치 이후 추가 네트워크 동기화를 하지 않도록 `--no-sync`를 사용합니다.
+설치 후 Bash·PowerShell에서 같은 명령으로 로컬 설치와 실제 stdio `initialize → tools/list`를 확인합니다. 현재 버전의 도구 수는 **38개**입니다. `doctor`는 MCP 도구가 아니라 별도 진단 CLI입니다.
 
 ```bash
-uv run --no-sync python - <<'PY'
-import asyncio, os, sys
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-
-async def check():
-    params = StdioServerParameters(
-        command=sys.executable, args=["-m", "yonsei_portal_mcp"],
-        env={"PYTHON_DOTENV_DISABLED": "1", "YONSEI_ID": "", "YONSEI_PASSWORD": ""},
-    )
-    with open(os.devnull, "w") as errlog:
-        async with stdio_client(params, errlog=errlog) as streams:
-            async with ClientSession(*streams) as client:
-                await client.initialize()
-                tools = (await client.list_tools()).tools
-                assert len(tools) == 34
-                print(f"{len(tools)} tools available")
-
-asyncio.run(asyncio.wait_for(check(), timeout=30))
-PY
+uv run --no-sync yonsei-portal-mcp doctor
+uv run --no-sync yonsei-portal-mcp doctor --json
+# 선택: 격리된 로컬 Chromium의 빈 페이지 시작 확인
+uv run --no-sync yonsei-portal-mcp doctor --browser
+# 선택: 지정한 파일의 자격 증명 존재 여부만 검사
+uv run --no-sync yonsei-portal-mcp doctor --env-file .env
 ```
 
-위 heredoc은 Bash용입니다. PowerShell에서는 다음 무인증 등록 목록 점검을 사용하거나 아래 클라이언트에서 목록을 확인하세요.
+- 기본 진단은 포털·외부 LLM 호출, 로그인, 쿠키 읽기를 하지 않습니다. 현재 폴더 `.env`의 **존재 여부만** 확인하고 내용을 자동으로 읽거나 상위 폴더를 탐색하지 않습니다.
+- 환경변수의 자격 증명은 값 대신 존재 여부와 출처만 출력합니다. `--env-file`을 명시하면 해당 파일만 읽어 존재 여부를 확인하되 값을 출력하거나 환경을 변경하거나 변수 치환을 하지 않습니다. “설정됨”은 인증 성공이 아닙니다.
+- Chromium 실행 파일 유무는 기본 점검하지만 기동은 `--browser`에서만 수행합니다. 임시·격리 환경의 `about:blank`만 열고 학교 접속이나 사용자 프로필·쿠키 확인은 하지 않습니다.
+- `--timeout`은 각 연결 검사 제한(초, 기본 10, 0 초과~120 이하)입니다. JSON 출력은 `schema_version`, `checks`, `public_features`, `scope`, `exit_code`를 제공합니다. 원시 서버 stderr·비밀값·개인 경로는 진단 출력에 포함하지 않습니다.
+- 종료 코드 **0**: 필수 로컬 점검 성공(공개 사이트/계정 미검증), **1**: 설치·stdio 또는 요청한 브라우저 기동 실패, **2**: 잘못된 인자·명시한 설정 파일 문제. 자격 증명과 Chromium은 기본 모드의 필수 조건이 아니므로 없더라도 0일 수 있습니다.
 
-```powershell
-$env:PYTHON_DOTENV_DISABLED = "1"
-uv run --no-sync python -c "import asyncio; from yonsei_portal_mcp.server import mcp; print(len(asyncio.run(mcp.list_tools())))"
-Remove-Item Env:PYTHON_DOTENV_DISABLED
-```
-
-PowerShell 간단 점검은 Python 도구 등록만 확인하며 stdio 전송 검사는 아닙니다.
+모듈 실행은 `uv run --no-sync python -m yonsei_portal_mcp doctor`와 같습니다. **기존 MCP 실행 명령은 바꾸지 않습니다.** 클라이언트 등록 인자에 `doctor`를 넣지 마세요.
 `uv run --no-sync yonsei-portal-mcp` 또는 `uv run --no-sync python -m yonsei_portal_mcp`를 직접 실행하면 stdin 요청을 기다립니다.
 웹 주소가 표시되지 않아도 정상일 수 있습니다. 도구 인자를 셸 인자로 보내는 CLI가 아니며 아래 MCP 클라이언트로 호출합니다.
 
@@ -361,7 +360,7 @@ VS Code용 프리셋 7개는 [.github/prompts](.github/prompts)에 있습니다:
 | TLS 오류 | 인증서 검증을 끄지 마세요. 시스템 시각·프록시·학교 인증서 변화 확인 후 비밀값 없는 오류 유형 보고 |
 
 일부 오류에는 `[CODE]` 문자열이 있지만 모든 실패가 구조화된 오류 코드로 통일돼 있지는 않습니다.
-일반 연결 확인은 `tools/list`, 실제 공개 도구 호출, 본인 로그인 조회 순으로 좁혀 확인하세요.
+일반 연결 확인은 `doctor`, 실제 공개 도구 호출, 본인 로그인 조회 순으로 좁혀 확인하세요. doctor 성공은 포털 접속 성공이나 보안 감사 통과가 아닙니다.
 네트워크 조회를 원하는 경우 MCP Inspector도 사용할 수 있습니다:
 
 ```bash
@@ -375,7 +374,7 @@ Node.js와 패키지 다운로드가 필요한 별도 도구입니다. Inspector
 | 필요한 내용 | 문서 |
 | --- | --- |
 | 실제 질문·답변 캡처·결과 해석 | [docs/USAGE.md](docs/USAGE.md) |
-| 34개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
+| 38개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
 | 개발 환경·테스트·LLM 하니스·릴리스 준비 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 | 기여 절차·회귀 테스트·공개 PR 원칙 | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | 비밀정보 보호·취약점 비공개 신고 | [SECURITY.md](SECURITY.md) |

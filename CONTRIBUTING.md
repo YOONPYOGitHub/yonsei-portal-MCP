@@ -9,14 +9,26 @@
 
 Python 3.10 이상과 [uv](https://docs.astral.sh/uv/)가 필요합니다. 복제한 저장소에서 실행하세요.
 
+macOS·Linux·WSL·네이티브 Windows의 공통 의존성 설치:
+
 ```bash
 uv sync --frozen --extra dev
-# 다른 로컬 프로젝트에서 사용하는 Playwright 브라우저를 삭제하지 않도록 합니다.
+```
+
+Bash에서는 다른 프로젝트의 브라우저가 삭제되지 않도록 다음과 같이 설치합니다.
+
+```bash
 PLAYWRIGHT_SKIP_BROWSER_GC=1 uv run --no-sync playwright install chromium
 ```
 
-PowerShell에서는 설치 전에 `$env:PLAYWRIGHT_SKIP_BROWSER_GC = "1"`을 설정합니다.
-Windows에서는 파일 보호를 위해 사용자별 비공개 ACL도 적용해야 합니다.
+PowerShell에서는 다음을 사용합니다.
+
+```powershell
+$env:PLAYWRIGHT_SKIP_BROWSER_GC = "1"
+uv run --no-sync playwright install chromium
+```
+
+로컬 연결 점검은 `uv run --no-sync yonsei-portal-mcp doctor`입니다. 기본 진단은 `.env` 내용·쿠키를 읽거나 포털·LLM을 호출하지 않으며 실제 로그인 검증을 대체하지 않습니다. Windows에서는 파일 보호를 위해 사용자별 비공개 ACL도 적용해야 합니다. 새 Windows CI runner의 구성과 실제 실행·로그인·ACL 검증은 구분합니다.
 
 `dev` 선택 의존성에는 OpenAI·Anthropic 클라이언트가 포함되지 않습니다.
 선택적 제공자 어댑터 테스트·데모에는 `--extra llm`을 사용하세요.
@@ -43,6 +55,8 @@ Windows에서는 파일 보호를 위해 사용자별 비공개 ACL도 적용해
 실제 LLM 테스트는 선택한 제공자에게 데이터를 전송하며 비용이 발생할 수 있습니다.
 원시 조회 결과, 쿠키, 개인을 식별할 수 있는 테스트 데이터를 PR에 포함하지 마세요.
 
+[개발 가이드](docs/DEVELOPMENT.md#7-ci와-공개-체크리스트)의 5개 OS/Python CI 조합과 별도 Security workflow를 확인하세요. Security는 push·PR·주간·수동 실행으로 잠금 런타임 의존성 감사와 비식별 Gitleaks 검사를 구성합니다. 이력·현재 공개 트리를 모두 검토하고 검사 통과를 모든 개인정보 제거의 증거로 사용하지 마세요.
+
 ## 공개 API와 호환성
 
 현재는 베타 소프트웨어입니다. 가능하면 도구 이름과 정상 입력을 유지하되,
@@ -57,10 +71,10 @@ SSO 허용 목록을 변경할 때는 실제 학교의 출처 확인과 합성 �
 
 ## 문서 언어
 
-사용자·개발자 문서의 설명은 **한국어를 기본**으로 합니다.
-공개 저장소라는 이유로 기존 문서를 영어로 바꾸지 마세요.
+수정하는 파일·절의 **기존 언어와 문체를 보존**합니다. 한국어 설명은 한국어로 유지하고,
+기존 영어 설명을 일괄 한국어로 바꾸거나 공개 저장소라는 이유로 한국어 문서를 영어로 바꾸지 마세요.
 명령어·API 식별자·설정 키·URL은 원문을 유지하고, 번역이 필요하면 별도 문서로 제안합니다.
-표준 라이선스의 법적 원문은 임의로 번역하여 대체하지 않습니다.
+표준 라이선스의 영어 법적 원문과 기존 고지는 임의로 번역하여 대체하지 않습니다.
 
 ## 라이선스
 

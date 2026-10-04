@@ -31,6 +31,8 @@ def test_dotenv_import_preserves_explicit_opt_out(monkeypatch, module_name, opt_
                 monkeypatch.setenv(name, value)
 
     monkeypatch.setattr("dotenv.load_dotenv", synthetic_dotenv)
+    # Exercise the synthetic loader, not the process-wide offline disable flag.
+    monkeypatch.delenv("PYTHON_DOTENV_DISABLED", raising=False)
     module = importlib.import_module(module_name)
     importlib.reload(module)
     assert calls

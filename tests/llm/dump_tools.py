@@ -19,12 +19,9 @@ import json
 import os
 import sys
 
-try:
-    from dotenv import load_dotenv
+from .env import load_harness_env
 
-    load_dotenv(override=False)
-except ImportError:  # pragma: no cover
-    pass
+load_harness_env()
 
 from .mcp_host import call_result_to_text, stdio_client_session
 

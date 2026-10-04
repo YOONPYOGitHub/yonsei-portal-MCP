@@ -86,6 +86,7 @@ async def test_transient_failures_have_exactly_one_retry(tmp_path, monkeypatch, 
     assert action.await_count == 2
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits are not Windows ACLs")
 def test_account_directories_private_without_chmod_of_storage_parent(tmp_path):
     tmp_path.chmod(0o755)
     session = sessions.LearnUsSession(settings(tmp_path))
@@ -113,17 +114,20 @@ async def test_cookie_save_is_atomic_and_private(tmp_path, monkeypatch):
     original = os.replace
     def replace(source, destination):
         assert path.read_text() == json.dumps(old)
-        assert stat.S_IMODE(os.stat(source).st_mode) == 0o600
+        if os.name == "posix":  # Keep atomic-replacement coverage on Windows.
+            assert stat.S_IMODE(os.stat(source).st_mode) == 0o600
         replaced.append(destination)
         return original(source, destination)
     monkeypatch.setattr(os, "replace", replace)
     await session._save_storage_state()
     assert replaced == [path]
     assert json.loads(path.read_text()) == new
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Creating symlinks requires Windows privileges")
 async def test_cookie_save_refuses_symlink_target(tmp_path):
     session = sessions.LearnUsSession(settings(tmp_path))
     victim = tmp_path / "unrelated.json"
@@ -140,6 +144,7 @@ async def test_cookie_save_refuses_symlink_target(tmp_path):
     assert victim.read_text() == "do not touch"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Creating symlinks requires Windows privileges")
 def test_cookie_directory_symlink_is_rejected(tmp_path):
     import hashlib
     account = hashlib.sha256(settings(tmp_path).yonsei_id.encode()).hexdigest()
@@ -166,6 +171,7 @@ async def test_start_discards_malformed_state_with_warning(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits are not Windows ACLs")
 async def test_start_refuses_public_cookie_file(tmp_path, monkeypatch):
     session = sessions.LearnUsSession(settings(tmp_path))
     session._storage_state_path.write_text('{"cookies": [], "origins": []}')
@@ -308,6 +314,7 @@ def test_origin_validator_rejects_ambiguous_urls(url):
     assert not is_https_origin(url, "https://ys.learnus.org/")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits are not Windows ACLs")
 def test_load_settings_creates_only_private_new_parent(tmp_path, monkeypatch):
     from yonsei_portal_mcp.config import load_settings
     parent = tmp_path / "new-storage"
@@ -385,6 +392,7 @@ async def test_playwright_network_errors_are_narrowly_classified(tmp_path, monke
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Creating symlinks requires Windows privileges")
 async def test_invalidation_rejects_replaced_symlink_directory_but_closes_resources(tmp_path):
     session = sessions.LearnUsSession(settings(tmp_path))
     path = session._storage_state_path
@@ -403,6 +411,7 @@ async def test_invalidation_rejects_replaced_symlink_directory_but_closes_resour
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(os.name == "nt", reason="Creating symlinks requires Windows privileges")
 async def test_start_refuses_symlink_file_without_opening_browser(tmp_path, monkeypatch):
     session = sessions.LearnUsSession(settings(tmp_path))
     target = tmp_path / "unrelated.json"
@@ -417,6 +426,7 @@ async def test_start_refuses_symlink_file_without_opening_browser(tmp_path, monk
     assert target.read_text() == '{"cookies": [], "origins": []}'
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits are not Windows ACLs")
 def test_existing_account_directories_are_tightened_not_storage_parent(tmp_path):
     value = settings(tmp_path)
     session = sessions.LearnUsSession(value)

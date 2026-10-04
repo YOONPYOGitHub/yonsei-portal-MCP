@@ -59,7 +59,7 @@ async def test_distribution_starts_stdio_without_credentials(tmp_path):
                 async with ClientSession(*streams) as session:
                     await session.initialize()
                     tools = (await session.list_tools()).tools
-                    assert len(tools) == len({tool.name for tool in tools}) == 34
+                    assert len(tools) == len({tool.name for tool in tools}) == 38
                     search = next(tool for tool in tools if tool.name == "search_library_books")
                     assert set(search.inputSchema["properties"]) == {"query", "page", "limit", "campus", "search_field", "offset"}
                     history = next(tool for tool in tools if tool.name == "get_my_loan_history")

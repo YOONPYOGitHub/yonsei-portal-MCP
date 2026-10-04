@@ -136,6 +136,13 @@ async def test_all_read_tools_over_stdio() -> None:
                 if not course_boards["boards"]:
                     pytest.fail("Need a course board for read-only listing verification", pytrace=False)
                 await invoke("get_lms_board_posts", {"board_id": course_boards["boards"][0]["board_id"]}, dict, ("posts", "count", "unlinked_count", "scope"))
+                await invoke("search_lms_board_posts", {"board_id": course_boards["boards"][0]["board_id"], "query": "시험", "max_pages": 2}, dict, ("count", "scanned_pages", "has_more_pages"))
+                sources = await invoke("list_notice_sources", {}, dict, ("count", "sources"))
+                for source in sources["sources"]:
+                    public = await invoke("get_university_notices", {"source": source["source"], "limit": 2}, dict, ("count", "notices", "pagination"))
+                    if not public["notices"]:
+                        pytest.fail("Need an official public notice for detail verification", pytrace=False)
+                    await invoke("get_university_notice", {"source": source["source"], "notice_id": public["notices"][0]["notice_id"]}, dict, ("title", "body", "attachments", "source_url"))
                 gradebook = await invoke("get_lms_gradebook", {"course_id": course_id}, dict, ("course_id", "items", "feedback_included"))
                 no_feedback = not gradebook["feedback_included"] and all("feedback" not in item for item in gradebook["items"])
                 assert no_feedback, "Gradebook feedback must be opt-in"
@@ -513,7 +520,16 @@ async def test_facility_status_matches_readonly_ui(view) -> None:
             date = (datetime.now(ZoneInfo("Asia/Seoul")).date() + timedelta(days=1)).isoformat()
             arguments = {"date": date}
             if view != "options":
-                arguments.update(building="학술정보관", group="5F 세미나룸" if view == "disabled" else "1F Y-스마트 스페이스", facility="세미나룸 5-1" if view == "disabled" else "세미나룸(Yellow)", duration_minutes=30)
+                arguments.update(building="학술정보관", group="5F 세미나룸" if view == "disabled" else "1F Y-스마트 스페이스")
+                if view == "disabled":
+                    choices = await facilities.fetch_facility_status(page, **arguments)
+                    disabled = [item for item in choices["options"]["facilities"] if not item["selectable"]]
+                    if not disabled:
+                        pytest.skip("Current source has no disabled facility in this group")
+                    arguments["facility"] = disabled[0]["name"]
+                else:
+                    arguments["facility"] = "세미나룸(Yellow)"
+                arguments["duration_minutes"] = 30
             result = await facilities.fetch_facility_status(page, **arguments)
             raw = await page.locator("table.facilityTbl.onlyPc tbody > tr > td").evaluate_all(r"""cells => cells.map(cell => Array.from(cell.querySelectorAll('.selectFacility'), element => ({
                 name: element.textContent.trim().replace(/\s+/g, ' '),

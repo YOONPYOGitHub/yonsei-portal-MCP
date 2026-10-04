@@ -45,8 +45,8 @@ async def get_json(url: str, *, params: dict | None = None, timeout: float = 15.
         return resp.json()
 
 
-async def get_html(url: str, *, params: dict | None = None, timeout: float = 20.0) -> str:
-    """GET public HTML, allowing only same-origin HTTPS redirects."""
+async def get_html(url: str, *, params: dict | None = None, timeout: float = 20.0, same_path: bool = False) -> str:
+    """GET public HTML with same-origin redirects, optionally preserving path."""
     origin = httpx.URL(url)
     if origin.scheme != "https" or origin.userinfo:
         raise httpx.HTTPError("Public HTML requests require HTTPS without credentials")
@@ -66,4 +66,6 @@ async def get_html(url: str, *, params: dict | None = None, timeout: float = 20.
                 or target.userinfo
             ):
                 raise httpx.HTTPError("Cross-origin public HTML redirect blocked")
+            if same_path and target.raw_path.split(b"?", 1)[0] != origin.raw_path.split(b"?", 1)[0]:
+                raise httpx.HTTPError("Path-changing public HTML redirect blocked")
         raise httpx.TooManyRedirects("Public HTML redirect limit exceeded")

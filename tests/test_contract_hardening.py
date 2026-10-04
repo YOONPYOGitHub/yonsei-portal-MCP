@@ -200,7 +200,7 @@ async def test_all_tool_unknown_arguments_are_errors_over_stdio(tmp_path):
             async with ClientSession(*streams) as client:
                 await client.initialize()
                 tools = (await client.list_tools()).tools
-                assert len(tools) == 34
+                assert len(tools) == 38
                 for tool in tools:
                     assert tool.inputSchema["additionalProperties"] is False
                     result = await client.call_tool(tool.name, {"unsupported_argument": "PRIVATE_SENTINEL"})
@@ -232,7 +232,7 @@ async def test_every_tool_rejects_unknown_arguments_before_dispatch(monkeypatch)
     dispatched = AsyncMock(return_value=[])
     monkeypatch.setattr(server.FastMCP, "call_tool", dispatched)
     tools = await server.mcp.list_tools()
-    assert len(tools) == 34
+    assert len(tools) == 38
     for tool in tools:
         with pytest.raises(ToolError, match="지원하지 않는"):
             await server.mcp.call_tool(tool.name, {"unexpected_private_argument": "sentinel"})

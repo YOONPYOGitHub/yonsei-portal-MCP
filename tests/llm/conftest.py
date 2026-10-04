@@ -1,7 +1,7 @@
 """Shared pytest fixtures for the LLM harness.
 
-Loads ``.env`` (so AZURE_OPENAI_* etc. are visible) and exposes a real-LLM
-``provider`` fixture that skips cleanly when no API key is configured.
+Loads legacy ``.env`` and, only with live opt-in, provider-only ``.env.llm``.
+Exposes a real-LLM ``provider`` fixture that skips when unconfigured.
 """
 from __future__ import annotations
 
@@ -10,12 +10,9 @@ import os
 import pytest
 
 # Load the project .env early so provider config is available.
-try:
-    from dotenv import load_dotenv
+from .env import load_harness_env
 
-    load_dotenv(override=False)
-except ImportError:  # pragma: no cover
-    pass
+load_harness_env()
 
 from .providers import ProviderUnavailable, make_provider  # noqa: E402
 
