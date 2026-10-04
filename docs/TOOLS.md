@@ -1,7 +1,23 @@
 # 도구 API 참조
 
-**0.5.0b1**의 MCP 도구 33개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
+**0.5.0b1 개발 소스와 이후 Unreleased 수정**의 MCP 도구 33개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
 설치와 연결은 [README](../README.md), 구조와 운영 계약은 [DESIGN](../DESIGN.md), 개발·검증 절차는 [개발 문서](DEVELOPMENT.md)를 참고하세요.
+
+## 기능별 바로가기
+
+질문 형태의 활용 예시는 [README](../README.md#이렇게-물어보세요), 실제 대화 캡처와 결과 해석은 [사용 가이드](USAGE.md)에서 볼 수 있습니다. 아래 링크는 각 도구의 입력·반환 계약으로 이동합니다.
+
+| 분야 | 필요한 기능 |
+| --- | --- |
+| LearnUs 강좌·학습 | [현재 강좌](#get_lms_courses) · [과거강좌](#get_lms_course_history) · [종합 현황](#get_lms_overview) · [마감](#get_lms_deadlines) · [출석·진도](#get_lms_attendance) · [주차별 자료](#get_lms_course_materials) |
+| LearnUs 과제·성적 | [과제 목록](#get_lms_assignments) · [제출·채점 상태](#get_lms_assignment_status) · [성적부](#get_lms_gradebook) |
+| LearnUs 공지·게시판 | [공지 목록](#get_lms_notices) · [공지 검색](#search_notices) · [본문](#get_notice) · [게시판 목록](#get_lms_boards) · [게시글 목록](#get_lms_board_posts) |
+| 도서관 공개 조회 | [도서 검색](#search_library_books) · [복본 상세](#get_library_book_detail) · [일반공지](#get_library_notices) · [좌석 집계](#get_library_seats) |
+| 도서관 로그인 조회 | [열람실별 좌석](#get_library_seat_rooms) · [내 대출](#get_my_loans) · [현재 예약](#get_my_reservations) · [대출 이력](#get_my_loan_history) · [이전 예약](#get_my_reservation_history) |
+| 학사행정 ERP | [프로필](#get_student_profile) · [시간표](#get_my_timetable) · [성적](#get_grades) · [시험](#get_exam_schedule) · [장학수혜](#get_scholarship_history) · [수강편람](#search_courses) |
+| 일정·내보내기 | [학사일정](#get_academic_calendar) · [개인 일정](#get_my_schedule) · [마감·반납일 ICS](#export_calendar_ics) · [반복 시간표 ICS](#export_timetable_ics) |
+
+도서관 공지 본문은 [get_notice](#get_notice)로 로그인 없이 조회합니다. [식별자 연결](#식별자-연결) · [응답과 오류](#mcp-응답과-오류) · [호출 예제](#호출-예제)도 참고하세요.
 
 ## 공통 계약
 
@@ -96,8 +112,8 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 인증·출처·캐시: LearnUs 본문은 로그인·계정별, 도서관 일반공지는 무로그인 공개 HTTP·공유 캐시이며 모두 URL별 1800초.
 입력 검사: HTTPS, 사용자명·비밀번호 없음, 포트 생략 또는 443. LearnUs는 호스트 `ys.learnus.org`, 경로 `/mod/ubboard/article.php`, 단일 `id`(ASCII 숫자 1~20자리)가 필수이고 `bwid`가 있으면 같은 규칙입니다. 이 함수는 그 밖의 쿼리 키를 일괄 금지하지 않습니다. 도서관은 `library.yonsei.ac.kr`의 `/bbs/content/1_숫자`만 지원하며 쿼리·프래그먼트를 제거해 요청합니다.
-반환: `url`, `title`, `date`, `author`, `body`. LearnUs는 제목·날짜·작성자·본문이 `null`일 수 있고 반환 URL에 `lang=ko`가 적용됩니다. 도서관은 `author=null`, 날짜는 ISO 날짜 또는 `null`, 추가로 `image_count`와 `note`(이미지 없으면 `null`)가 있습니다.
-범위: 본문 텍스트만 읽으며 요약·이미지 OCR·첨부 다운로드는 하지 않습니다. LearnUs 작성자·본문에 개인정보가 포함될 수 있습니다. 게시글 목록의 `url`을 그대로 사용하고 임의 호스트 열람 용도로 사용하지 마세요.
+반환: `url`, `title`, `date`, `author`, `body`, `image_count`, `note`. LearnUs는 제목·날짜·작성자가 `null`일 수 있고 반환 URL에 `lang=ko`가 적용됩니다. 이미지 전용 공지는 `body=""`여도 `image_count>0`과 이미지 미추출 안내를 반환합니다. 본문 컨테이너가 없거나 텍스트·이미지를 모두 확인할 수 없으면 정상 빈 본문 대신 오류입니다. 도서관은 `author=null`, 날짜는 ISO 날짜 또는 `null`입니다. 두 경로 모두 이미지가 없으면 `note=null`입니다.
+범위: 본문 텍스트만 읽으며 요약·이미지 OCR·첨부 다운로드는 하지 않습니다. 이미지 전용 공지를 내용 없는 공지로 요약하거나 이미지 내용을 추측하지 마세요. LearnUs 작성자·본문에 개인정보가 포함될 수 있습니다. 게시글 목록의 `url`을 그대로 사용하고 임의 호스트 열람 용도로 사용하지 마세요.
 
 ### `get_lms_attendance`
 
@@ -291,9 +307,10 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 | `seat_type` | `string` 또는 `null` | `null` | `general`/일반열람석, `pc`/PC석, `study`/스터디룸, `notebook`/노트북석; 생략 또는 `""`이면 전체 |
 
 인증·출처·캐시: 무로그인 공개 HTTP, 도서관 `/seat/info`, 입력 필터별 공유 캐시 60초.
-반환: `rows`, `total`, `in_use`, `remaining`, `usage_pct`, `source_url`, `fetched_at`, `availability_note`. 행은 `building`, `building_code`(`center`/`yonsei`), `seat_type`, `seat_type_code`, `total`, `in_use`, `remaining`, `usage_pct`입니다. 좌석 수는 정수, 이용률은 소수점 한 자리 숫자입니다.
-범위: 건물군×유형 집계이며 0/0인 행은 제외합니다. 필터는 공백 제거·소문자 변환 후 적용하고 합계를 다시 계산합니다. 알 수 없는 값이나 공백만 있는 문자열은 오류가 아니라 빈 행·0 합계가 됩니다. 한글 유형명은 코드의 표시용 매핑입니다.
-주의: `remaining`은 공개 집계상 잔여석이지 배정 가능 좌석이 아닙니다. 개인 정보는 없지만 열람실 도구와 집계 범위·갱신 상태가 달라 합산하면 안 됩니다.
+반환: `rows`, `total`, `raw_use`, `raw_total_minus_use`, `in_use=null`, `remaining=null`, `usage_pct=null`, `semantics_verified=false`, `scope="public_widget_api"`, `source_url`, `fetched_at`, `availability_note`. 행은 `building`, `building_code`(`center`/`yonsei`), `seat_type`, `seat_type_code`, 원문 `total`·`raw_use`·차이값 `raw_total_minus_use`와 미확인 `in_use`·`remaining`·`usage_pct`를 포함합니다.
+범위: 건물군×유형의 공개 API 원문 수치입니다. `total=0`·`raw_use=0`인 행은 제외하고, 필터를 적용한 행의 원문 수치만 합산합니다. 지원 필터는 공백 제거·소문자 변환 및 한글 이름 매칭으로 정규화합니다. **알 수 없는 유형이나 공백만 있는 문자열은 요청 전에 오류**이며 정상 0석으로 바꾸지 않습니다.
+주의: 2026-10-03 같은 응답을 대조한 결과, API `use`와 홈페이지의 사용/잔여 칸이 서로 충돌했습니다. **`raw_use`나 `raw_total_minus_use`를 사용 중·잔여석으로 해석하거나 이를 근거로 이용 가능한 좌석/방을 추천하면 안 됩니다.** `total`도 전체 열람실 수용력 보증이 아닙니다. 실제 표에 표시된 열람실별 현황은 로그인 도구 [get_library_seat_rooms](#get_library_seat_rooms)로 확인합니다. 두 원천은 범위가 달라 합산하지 않습니다.
+`seat_type="study"`는 시간대별 세미나룸 예약 가능 여부나 개인 시설 예약내역을 제공하지 않습니다.
 
 ### `get_library_seat_rooms`
 
@@ -304,7 +321,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 인증·출처·캐시: 도서관 로그인, `/relation/seat` 열람실별 좌석 표, 계정별 60초. 로그인은 필요하지만 개인 배정 내역은 아닙니다.
 반환: `count`, `rooms`, `total`, `in_use`, `available`, `source_totals_match`(`true` 또는 원문 합계 미표시 시 `null`), `assignable_available`, `unassignable_rooms`, `usage_pct`, `availability_note`, `source_url`, `fetched_at`.
 항목: `name`, `assignable`(불리언), `total`(운영좌석), `capacity`(수용좌석, `null` 가능), `in_use`, `available`, `hours`(원문), `usage_pct`·`note`(`null` 가능). `count`는 열람실 수입니다. 원문 합계 불일치는 `false` 반환이 아닌 오류입니다.
-범위: `available`은 배정불가 방도 포함한 표시 잔여석, `assignable_available`은 배정가능 방만의 잔여 합계, `unassignable_rooms`는 배정불가 방 수입니다. 어느 값도 실제 착석을 보장하지 않습니다.
+범위: `available`은 배정불가 방도 포함한 표시 잔여석, `assignable_available`은 배정가능 방만의 잔여 합계, `unassignable_rooms`는 배정불가 방 수입니다. 이용률이 `%`만 표시되는 행은 `usage_pct=null`입니다. 어느 값도 실제 착석을 보장하지 않습니다. 세미나룸·스터디룸의 시간대별 예약표와 개인 시설 예약내역은 미지원이며, 도서 예약 도구로 대체할 수 없습니다.
 
 ## 학사행정 ERP
 

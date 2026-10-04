@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -55,6 +55,22 @@ def test_changed_credentials_rejected_before_cache_or_session_reuse(monkeypatch,
 def browser_session(tmp_path):
     settings = Settings("test-id", "test-password", False, tmp_path / "state.json")
     return sessions.BrowserSession(settings, settings.storage_state_path)
+
+
+@pytest.mark.asyncio
+async def test_erp_waits_for_late_authenticated_shell_without_resubmitting_credentials(tmp_path, monkeypatch):
+    settings = Settings("test-id", "test-password", False, tmp_path / "state.json")
+    session = sessions.ErpSession(settings)
+    monkeypatch.setattr(session, "_is_authenticated", AsyncMock(side_effect=[False, True]))
+    page = MagicMock()
+    page.goto = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
+    page.wait_for_selector = AsyncMock(side_effect=sessions.PlaywrightTimeoutError("login form absent"))
+    page.locator.return_value.or_.return_value.first.wait_for = AsyncMock()
+    page.fill = AsyncMock()
+    await session._login(page)
+    page.locator.return_value.or_.return_value.first.wait_for.assert_awaited_once()
+    page.fill.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -458,6 +458,27 @@ async def test_notice_body_dom_numeric_dates(local_learnus_dom, raw, expected):
 
 
 @pytest.mark.asyncio
+async def test_notice_image_only_body_is_explicit_not_missing(local_learnus_dom):
+    await local_learnus_dom.set_content('<h3>Notice</h3><div class="text_to_html"><img src="/one.png"><img src="/two.png"></div>')
+    page = SimpleNamespace(goto=AsyncMock(), wait_for_timeout=AsyncMock(),
+                           evaluate=local_learnus_dom.evaluate, wait_for_function=AsyncMock(),
+                           url=learnus.LEARNUS_HOME + "mod/ubboard/article.php?id=123")
+    result = await learnus.fetch_notice_body(page, page.url)
+    assert result["body"] == "" and result["image_count"] == 2
+    assert result["note"]
+
+
+@pytest.mark.asyncio
+async def test_notice_missing_body_is_not_a_successful_empty_result(local_learnus_dom):
+    await local_learnus_dom.set_content('<main id="region-main"><h3>Service unavailable</h3></main>')
+    page = SimpleNamespace(goto=AsyncMock(), wait_for_timeout=AsyncMock(),
+                           evaluate=local_learnus_dom.evaluate, wait_for_function=AsyncMock(),
+                           url=learnus.LEARNUS_HOME + "mod/ubboard/article.php?id=123")
+    with pytest.raises(ScrapeFailedError):
+        await learnus.fetch_notice_body(page, page.url)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("final_id", ["123", "456"])
 async def test_attendance_verified_redirect_keeps_course_identity(final_id):
     page = SimpleNamespace(

@@ -789,11 +789,51 @@ def test_public_seats_reject_invalid_counts(invalid) -> None:
         seats._parse(payload)
 
 
-def test_public_seats_preserve_legitimate_zero() -> None:
-    assert seats._parse(_public_seat_payload())["remaining"] == 0
+def test_public_seats_preserve_raw_zero_without_claiming_availability() -> None:
+    result = seats._parse(_public_seat_payload())
+    assert result["total"] == result["raw_use"] == 0
+    assert result["in_use"] is None and result["remaining"] is None
+    assert result["semantics_verified"] is False
     payload = _public_seat_payload()
     payload.update(center_general_total=100, center_general_use=30)
-    assert seats._parse(payload)["remaining"] == 70
+    result = seats._parse(payload)
+    assert result["raw_use"] == 30 and result["raw_total_minus_use"] == 70
+    assert result["usage_pct"] is None
+    assert result["rows"][0]["remaining"] is None
+
+
+@pytest.mark.parametrize("has_rows", [False, True])
+def test_public_seat_smoke_accepts_unknown_occupancy(has_rows):
+    from tests.smoke_seats import _check_shape
+
+    payload = _public_seat_payload()
+    if has_rows:
+        payload.update(yonsei_pc_total=931, yonsei_pc_use=849)
+    result = seats._parse(payload)
+    _check_shape(result)
+    with pytest.raises(AssertionError):
+        _check_shape({**result, "remaining": 0})
+
+
+@pytest.mark.asyncio
+async def test_public_seats_filtered_values_remain_unverified(monkeypatch):
+    payload = _public_seat_payload()
+    payload.update(yonsei_pc_total=931, yonsei_pc_use=849)
+    monkeypatch.setattr(httpclient, "get_json", AsyncMock(return_value=payload))
+    result = await seats.fetch_seats("pc")
+    assert result["raw_use"] == 849 and result["raw_total_minus_use"] == 82
+    assert result["in_use"] is None and result["remaining"] is None
+    assert result["semantics_verified"] is False and result["availability_note"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("seat_type", ["unknown", "   ", 123])
+async def test_public_seats_unknown_filter_fails_before_network(monkeypatch, seat_type):
+    fetch = AsyncMock()
+    monkeypatch.setattr(httpclient, "get_json", fetch)
+    with pytest.raises(ValueError):
+        await seats.fetch_seats(seat_type)
+    fetch.assert_not_awaited()
 
 
 @pytest.mark.asyncio

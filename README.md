@@ -4,40 +4,117 @@
 현재 강좌, 마감, 출석, 성적, 시간표, 게시판, 도서·좌석과 학사일정을 33개 도구로 제공합니다.
 인증 조회는 Playwright Chromium, 공개 조회는 HTTP를 사용합니다. 웹 UI나 원격 HTTP MCP 서비스가 아니라 **로컬 stdio 프로세스**입니다.
 
-현재 소스 버전은 **0.5.0b1 공개 베타**입니다. 패키지 게시와는 별개이며 아래 소스 설치로 사용할 수 있습니다.
-의존성은 `mcp>=1.27.2,<2`로 제한합니다. `uv sync --frozen`은 검증한 SDK 1.27.2를 사용하고,
-별도 wheel 설치에서도 호환되지 않는 SDK 2.x는 선택되지 않습니다.
+[사용 가이드·실제 캡처](docs/USAGE.md) · [질문 예시](#이렇게-물어보세요) · [전체 기능 33개](#지원-기능-전체-목록) · [설치](#빠른-시작) · [클라이언트 연결](#클라이언트-연결) · [API 참조](docs/TOOLS.md)
 
 > 이 프로젝트는 학교의 공식 서비스가 아닙니다. 본인에게 허용된 계정·조회 범위에서 사용하고 학교 이용 정책을 확인하세요.
 > 로그인 자격 증명은 학교 인증에 사용하며, 조회 결과는 연결한 MCP 클라이언트와 그 LLM에 전달될 수 있습니다.
 > 읽기 전용은 개인정보가 없다는 뜻이 아닙니다. 과제 제출·예약·취소·대출 연장·수강신청·결제는 지원하지 않습니다.
 
-## 문서 안내
+## 이렇게 물어보세요
 
-| 필요한 내용 | 문서 |
-| --- | --- |
-| 설치·연결·설정·문제 해결 | 이 README |
-| 33개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
-| 개발 환경·테스트·LLM 하니스·릴리스 준비 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
-| 내부 구조·제약·미완료 작업 | [DESIGN.md](DESIGN.md) |
-| 버전별 변경과 호환성 주의사항 | [CHANGELOG.md](CHANGELOG.md) |
+MCP 연결 후 사용하는 클라이언트의 대화창에 입력할 수 있는 예시입니다. 질문에 맞는 자료를 도구로 조회하고, 요약·비교는 연결한 LLM이 수행합니다.
 
-## 주요 기능
+실제 질문 → 도구 호출 → 답변 캡처와 결과 해석은 [사용 가이드](docs/USAGE.md)에서 확인하세요.
 
-| 영역 | 가능한 작업 | 중요한 구분 |
-| --- | --- | --- |
-| LearnUs 학습 | 현재/과거 강좌, 달력 마감, 출석·자료, 과제 목록·제출상태, 종합 조회 | 진도·수료 마감은 제출 과제가 아님. 파일·영상·제출물은 다운로드하지 않음 |
-| LearnUs 성적·게시판 | 항목별 성적부, 강좌 게시판·글 목록, 공지 검색·본문 | 성적 피드백 기본 제외. 게시판 글 목록은 첫 페이지·제목/날짜/링크만 제공 |
-| ERP | 프로필, 수강신청내역 기반 시간표, 성적 필터, 수강편람, 시험, 장학수혜 | LMS 점수와 ERP 성적을 구분. 장학수혜는 모집 공고가 아님 |
-| 도서관 | 현재 대출/예약, 이력 기본 조회, 캠퍼스·서명·저자별 소장자료 검색, 복본·공지, 좌석 | 검색 전체 건수·연속조회 제공. 자료 건수와 복본 수는 다름. 개인 이력 날짜·페이지 입력 미지원 |
-| 일정 | 기간별 마감·반납일 묶음, 공식 학사일정, 마감/반복 시간표 ICS | 반복 ICS는 사용자가 확인한 기간·교시 시각 필요. 파일 저장·캘린더 업로드는 하지 않음 |
+| 하고 싶은 일 | 질문 예시 | 학교 로그인 | 관련 기능 |
+| --- | --- | --- | --- |
+| 책 찾기·대출 상태 확인 | 신촌 도서관에 위키드 한국어 소설이 있는지, 복본별로 대출 가능한지 확인해줘. | 불필요 | [도서 검색](docs/TOOLS.md#search_library_books) + [복본 상세](docs/TOOLS.md#get_library_book_detail) |
+| 열람실 현황 확인 | 열람실별 사용 중·표시 잔여석과 배정 가능한 방의 잔여 합계를 구분해줘. | 필요 | [열람실별 좌석](docs/TOOLS.md#get_library_seat_rooms) |
+| 학교 일정 확인 | 현재 공개된 학사일정에서 수강철회 기간을 찾아줘. | 불필요 | [학사일정](docs/TOOLS.md#get_academic_calendar) |
+| 학습 현황 한 번에 보기 | LearnUs의 현재 강좌, 다가오는 마감, 강좌 공지를 정리해줘. | 필요 | [학습 종합 조회](docs/TOOLS.md#get_lms_overview) |
+| 과제 제출 여부 확인 | 현재 강좌의 과제 목록을 보고 각 과제의 제출 상태와 채점 상태를 확인해줘. | 필요 | [과제 목록](docs/TOOLS.md#get_lms_assignments) + [제출상태](docs/TOOLS.md#get_lms_assignment_status) |
+| 공지 찾기·내용 확인 | LearnUs 강좌 공지에서 중간시험 관련 제목을 찾아 본문을 정리해줘. | 필요 | [공지 검색](docs/TOOLS.md#search_notices) + [공지 본문](docs/TOOLS.md#get_notice) |
+| 수업 장소 확인 | 내 시간표를 요일별로 정리하고 강의실과 교시를 보여줘. | 필요 | [시간표](docs/TOOLS.md#get_my_timetable) |
+| 성적 확인 | 2025년 2학기 과목 성적을 보여주고, 누적 평점은 따로 표시해줘. | 필요 | [ERP 성적](docs/TOOLS.md#get_grades) |
+| 개인 일정 모아보기 | 오늘부터 7일간 LearnUs 마감과 도서 반납일을 함께 보여줘. | 필요 | [개인 일정](docs/TOOLS.md#get_my_schedule) |
+| 캘린더로 옮기기 | LearnUs 마감과 도서 반납일을 캘린더에 가져올 ICS 텍스트로 만들어줘. | 필요 | [마감·반납일 내보내기](docs/TOOLS.md#export_calendar_ics) |
 
-무로그인·무브라우저 도구: `get_library_seats`, `search_library_books`, `get_library_book_detail`,
-`get_library_notices`, `get_academic_calendar`, 도서관 URL의 `get_notice`입니다. 그 밖의 조회는 학교 로그인과 Chromium이 필요합니다.
+조회 범위·캐시·권한에 따라 확인할 수 있는 결과가 달라집니다. 잔여석은 실제 배정을 보장하지 않으며, 진도·수료 마감은 제출 과제와 구분합니다. ICS 도구는 텍스트를 반환할 뿐 파일 저장이나 캘린더 등록은 하지 않습니다.
 **LLM API 키는 MCP 서버 사용에 필요하지 않습니다.** 모델은 Claude Code/Desktop·VS Code 등 클라이언트가 선택합니다.
-API 키를 사용하는 저장소 테스트 하니스는 [개발 안내](docs/DEVELOPMENT.md)에 별도로 설명합니다.
+
+<details>
+<summary>실제 대화 기록 미리보기: 도서 검색과 복본 상태</summary>
+
+![2026-09-30 실제 도서 조회 기록 뷰어. 위키드 1권 2024년판의 신촌 복본 상태와 원문 링크](docs/assets/guide/books.png)
+
+실제 LLM·MCP 기록을 표시한 뷰어 캡처이며 Copilot·Claude 앱 화면이 아닙니다. 상태는 촬영 시점 기준입니다. [질문 전문과 결과 해석](docs/USAGE.md#1-도서-찾기와-대출-상태)을 확인하세요.
+
+</details>
+
+## 지원 기능 전체 목록
+
+**LearnUs 14개 · 도서관 9개 · 학사행정 6개 · 일정 4개 = 33개.** 도구 이름을 누르면 입력·반환값·제약을 볼 수 있습니다.
+`필요`는 본인 학교 계정과 Chromium이 필요하다는 뜻이며, `불필요`는 공개 HTTP 조회입니다.
+
+### LearnUs (14개)
+
+| 기능 | MCP 도구 | 학교 로그인 |
+| --- | --- | --- |
+| 현재 수강 강좌 목록 | [get_lms_courses](docs/TOOLS.md#get_lms_courses) | 필요 |
+| 연도·학기별 과거강좌 표시 목록 | [get_lms_course_history](docs/TOOLS.md#get_lms_course_history) | 필요 |
+| 강좌·마감·최근 강좌 공지 묶음 | [get_lms_overview](docs/TOOLS.md#get_lms_overview) | 필요 |
+| 달력에 표시된 과제·진도·수료 마감 | [get_lms_deadlines](docs/TOOLS.md#get_lms_deadlines) | 필요 |
+| 강좌별 출석·학습 진도 표 | [get_lms_attendance](docs/TOOLS.md#get_lms_attendance) | 필요 |
+| 주차별 학습활동·자료 제목과 링크 | [get_lms_course_materials](docs/TOOLS.md#get_lms_course_materials) | 필요 |
+| 강좌별 과제 목록 | [get_lms_assignments](docs/TOOLS.md#get_lms_assignments) | 필요 |
+| 과제 제출상태·채점상태·마감 | [get_lms_assignment_status](docs/TOOLS.md#get_lms_assignment_status) | 필요 |
+| 항목별 LMS 성적부·선택적 피드백 | [get_lms_gradebook](docs/TOOLS.md#get_lms_gradebook) | 필요 |
+| 홈에 표시된 강좌·플랫폼 공지 목록 | [get_lms_notices](docs/TOOLS.md#get_lms_notices) | 필요 |
+| 수집된 공지 제목·강좌·유형 키워드 검색 | [search_notices](docs/TOOLS.md#search_notices) | 필요 |
+| LearnUs·도서관 공지 본문 텍스트 | [get_notice](docs/TOOLS.md#get_notice) | LearnUs 필요 / 도서관 불필요 |
+| 강좌 게시판 목록 | [get_lms_boards](docs/TOOLS.md#get_lms_boards) | 필요 |
+| 게시판 첫 페이지의 글 제목·날짜·링크 | [get_lms_board_posts](docs/TOOLS.md#get_lms_board_posts) | 필요 |
+
+자료·영상·제출물은 다운로드하지 않습니다. LMS 점수는 ERP 성적과 별개이며, 과거강좌는 화면의 표시 범위입니다.
+
+### 도서관 (9개)
+
+| 기능 | MCP 도구 | 학교 로그인 |
+| --- | --- | --- |
+| 캠퍼스·서명·저자별 소장자료 검색, 전체 건수·연속조회 | [search_library_books](docs/TOOLS.md#search_library_books) | 불필요 |
+| 복본별 소장처·청구기호·상태·반납예정일 | [get_library_book_detail](docs/TOOLS.md#get_library_book_detail) | 불필요 |
+| 일반공지 첫 페이지 목록 | [get_library_notices](docs/TOOLS.md#get_library_notices) | 불필요 |
+| 건물군·유형별 공개 원문 수치 (**사용·잔여 의미 미확인**) | [get_library_seats](docs/TOOLS.md#get_library_seats) | 불필요 |
+| 열람실별 좌석·운영시간·배정 가능 여부 | [get_library_seat_rooms](docs/TOOLS.md#get_library_seat_rooms) | 필요 |
+| 내 대출 도서·반납예정일 | [get_my_loans](docs/TOOLS.md#get_my_loans) | 필요 |
+| 내 현재 도서 예약·순위·상태 | [get_my_reservations](docs/TOOLS.md#get_my_reservations) | 필요 |
+| 내 대출 이력의 기본 표시 결과 | [get_my_loan_history](docs/TOOLS.md#get_my_loan_history) | 필요 |
+| 내 이전 도서 예약 이력의 기본 표시 결과 | [get_my_reservation_history](docs/TOOLS.md#get_my_reservation_history) | 필요 |
+
+검색 자료 수와 실제 복본 수는 다릅니다. 개인 이력의 날짜·페이지 지정, 예약 생성·취소·대출 연장은 지원하지 않습니다.
+공개 좌석은 원문 표시의 의미 충돌 때문에 `in_use`·`remaining`·`usage_pct`를 `null`로 반환합니다. 잔여석 확인에는 로그인 열람실 도구를 사용하세요. **세미나룸 시간대별 예약 가능 여부·개인 시설 예약내역은 미지원**입니다.
+
+### 학사행정 ERP (6개)
+
+| 기능 | MCP 도구 | 학교 로그인 |
+| --- | --- | --- |
+| 학과·조회 학기·수강학점 프로필 | [get_student_profile](docs/TOOLS.md#get_student_profile) | 필요 |
+| 현재 수강신청내역 기반 주간 시간표·강의실 | [get_my_timetable](docs/TOOLS.md#get_my_timetable) | 필요 |
+| 연도·학기별 성적과 누적 평점·취득학점 | [get_grades](docs/TOOLS.md#get_grades) | 필요 |
+| 중간·기말 시험시간표 | [get_exam_schedule](docs/TOOLS.md#get_exam_schedule) | 필요 |
+| 본인 장학수혜내역 | [get_scholarship_history](docs/TOOLS.md#get_scholarship_history) | 필요 |
+| 교과목명·연도·학기·캠퍼스별 수강편람 | [search_courses](docs/TOOLS.md#search_courses) | 필요 |
+
+프로필의 이름·학번은 기본 제외합니다. 장학금 모집 공고·강의계획서·수강 정원 조회·수강신청은 지원하지 않습니다. 시험 조회기간 미등록은 시험 없음과 다릅니다.
+
+### 일정·내보내기 (4개)
+
+| 기능 | MCP 도구 | 학교 로그인 |
+| --- | --- | --- |
+| 현재 공개된 신촌·국제 학사일정 | [get_academic_calendar](docs/TOOLS.md#get_academic_calendar) | 불필요 |
+| 오늘부터 1~90일 마감·반납일, 주간 시간표·선택적 시험 조회 | [get_my_schedule](docs/TOOLS.md#get_my_schedule) | LearnUs·ERP 필요 / 도서 포함 시 도서관 |
+| LearnUs 마감·선택적 도서 반납일 ICS 텍스트 | [export_calendar_ics](docs/TOOLS.md#export_calendar_ics) | LearnUs 필요 / 도서 포함 시 도서관 |
+| 주간 시간표의 반복 ICS 텍스트 | [export_timetable_ics](docs/TOOLS.md#export_timetable_ics) | ERP 필요 |
+
+반복 시간표에는 사용자가 확인한 학기 기간·교시별 시각·제외일이 필요합니다. 휴강·공휴일 자동 반영, 캘린더 업로드·동기화는 지원하지 않습니다.
+
+**지원하지 않는 작업:** 과제 제출, 게시글 작성·수정, 예약·취소·연장, 수강신청·결제. 조회와 텍스트 생성만 수행합니다.
 
 ## 빠른 시작
+
+현재 소스 버전은 **0.5.0b1 공개 베타**이며 이후 [Unreleased 수정](CHANGELOG.md#unreleased)을 포함합니다. 패키지 게시와는 별개이며 아래 소스 설치로 사용할 수 있습니다.
+의존성은 `mcp>=1.27.2,<2`로 제한합니다. `uv sync --frozen`은 검증한 SDK 1.27.2를 사용하고,
+별도 wheel 설치에서도 호환되지 않는 SDK 2.x는 선택되지 않습니다.
 
 ### 1. 실행 환경 준비
 
@@ -182,22 +259,13 @@ WSL 설치는 VS Code Remote WSL 또는 WSL 안의 Claude Code와 사용하는 �
 2. 로그인 확인: “현재 LearnUs 수강 강좌 목록을 조회해줘.” → `get_lms_courses`. headed 창에서 필요하면 직접 추가 인증을 처리합니다.
 3. 이후 일반 사용: 추가 인증 없이 동작하는지 확인한 뒤 `YONSEI_HEADED=false`로 변경하고 서버를 재시작합니다.
 
-| 하고 싶은 일 | 도구 연결 |
-| --- | --- |
-| 과제 제출·채점 여부 확인 | `get_lms_courses` → `get_lms_assignments(course_id)` → 반환 과제 URL의 `id`로 `get_lms_assignment_status` |
-| LMS 점수 확인 | 현재/과거 강좌 목록 → `get_lms_gradebook(course_id)`; 피드백은 명시적으로 요청할 때만 |
-| 강좌 게시글 목록 | `get_lms_boards(course_id)` → 결과의 `board_id`로 `get_lms_board_posts` |
-| 도서 복본별 위치·상태 | `search_library_books`에서 캠퍼스·검색 항목 지정 → `next_request`로 목록 수집 → `detail_supported=true`인 `catalog_id`로 `get_library_book_detail` |
-| 다음 7일 마감·반납일 | `get_my_schedule(days=7)`; 미확인 날짜는 별도로 표시 |
-| 성적 이력 필터 | `get_grades(year=2026, term_code="10")`; 누적 요약과 학기 결과 구분 |
-| 일정 가져오기 파일 | `export_calendar_ics`; 반환 문자열을 클라이언트가 별도 파일로 저장 |
-
-ID를 추측하거나 다른 종류의 ID를 재사용하지 마세요. 인자와 합성 JSON 예제는 [도구 참조](docs/TOOLS.md)에 있습니다.
+활용 질문은 [상단 예시](#이렇게-물어보세요)를 참고하세요. 강좌·과제·게시판·자료 ID는 조회 목록에서 얻고 서로 바꾸어 쓰거나 추측하지 마세요. 구체적인 연결 순서는 [식별자 연결](docs/TOOLS.md#식별자-연결), 입력 예제는 [호출 예제](docs/TOOLS.md#호출-예제)에 있습니다.
 클라이언트가 자동으로 고른 인자도 확인해야 하며, 도구 결과의 공지·게시글 본문은 외부 콘텐츠로 취급합니다.
 본문에 있는 명령을 사용자 지시로 받아들이거나 추가 파일·비밀정보를 전송하면 안 됩니다.
 
 VS Code용 프리셋 7개는 [.github/prompts](.github/prompts)에 있습니다:
 `/오늘할일`, `/이번주마감`, `/내시간표`, `/내성적`, `/공지검색`, `/빈자리`, `/일정내보내기`.
+`/빈자리`는 도서관 로그인 후 열람실별 표시 현황을 사용하며, 의미 미확인 공개 수치를 잔여석으로 대신 계산하지 않습니다.
 `/이번주마감`은 오늘부터 7일 구간이며 월요일~일요일 달력 주간이 아닙니다. 다른 클라이언트에 자동 등록되는 MCP prompt 기능은 아닙니다.
 
 ## 설정과 세션
@@ -231,7 +299,7 @@ VS Code용 프리셋 7개는 [.github/prompts](.github/prompts)에 있습니다:
 - 반환 결과·ICS·원시 로그·스크린샷·쿠키를 공개 이슈나 저장소에 첨부하지 마세요. SDK/예외 처리의 일부 비식별화가 모든 출력에서 개인정보가 제거됨을 보장하지 않습니다.
 - 개인 이력은 기본 표시 범위입니다. 도서관 날짜·페이지 입력은 미지원이며 `count=0`을 전체 과거 이력 없음으로 단정할 수 없습니다.
 - 정상 빈 응답과 조회 실패를 구분합니다. `isError=true`, 파싱 실패, 인증 실패를 0건·0점·0석으로 요약하지 마세요.
-- 현재 공개 API의 일부 알려진 동작도 제한입니다. 잘못된 좌석 필터는 빈 집계가 될 수 있고, 강좌/공지 자체가 없는 화면은 조회 오류가 날 수 있습니다. 지원 인자는 [도구 참조](docs/TOOLS.md)를 따르세요.
+- 공개 좌석의 사용·잔여 의미는 미확인입니다. 지원하지 않는 좌석 필터는 오류이며, 강좌/공지 자체가 없는 화면도 조회 오류가 날 수 있습니다. 지원 인자는 [도구 참조](docs/TOOLS.md)를 따르세요.
 - MIT 라이선스는 이 소스 코드에 적용됩니다. 학교 공지·강의자료·학생 데이터의 재배포 권한까지 부여하지 않습니다. [LICENSE](LICENSE).
 
 ## 문제 해결
@@ -262,6 +330,13 @@ Node.js와 패키지 다운로드가 필요한 별도 도구입니다. Inspector
 
 ## 업데이트와 개발
 
-기여·테스트·provider 설정·설치 wheel 점검·릴리스 체크리스트는 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)에 있습니다.
+| 필요한 내용 | 문서 |
+| --- | --- |
+| 실제 질문·답변 캡처·결과 해석 | [docs/USAGE.md](docs/USAGE.md) |
+| 33개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
+| 개발 환경·테스트·LLM 하니스·릴리스 준비 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
+| 내부 구조·제약·미완료 작업 | [DESIGN.md](DESIGN.md) |
+| 버전별 변경과 호환성 주의사항 | [CHANGELOG.md](CHANGELOG.md) |
+
 소스 업데이트는 서버 종료 후 로컬 변경을 보존하고 `git pull --ff-only`, `uv sync --frozen`을 실행한 뒤 재시작합니다.
 Playwright 버전이 바뀌면 해당 환경의 Chromium 설치도 갱신하세요. 공개 지원 여부는 설치된 서버의 `tools/list`와 해당 버전 문서를 기준으로 합니다.

@@ -1,0 +1,862 @@
+{
+  "format": "yonsei-public-guide-v1",
+  "client": "Repository run_agent + stdio MCP; recorded transcript viewer, not a client application screenshot",
+  "provider": "azure-openai",
+  "model_note": "Configured deployment; exact model revision is not exposed by the agent result",
+  "server_version": "0.5.0b1",
+  "credentials_sent_to_mcp": false,
+  "current_contract_note": "Archived 2026-09-30 responses, not current API examples. The seats answer failed later semantic verification: API use and homepage occupied/remaining columns conflict. Current get_library_seats returns semantics_verified=false and null in_use/remaining/usage_pct. Do not interpret the archived 920/11 values as verified occupancy or availability. Original questions, answers and tool responses are preserved unchanged.",
+  "capture_note": "Two earlier all-edition book queries produced a publication-year grouping error and a copy-count error (22 claimed, 23 in tool data). The guide uses a narrower single-edition question. The selected answers are unedited; this is not a reliability benchmark.",
+  "examples": [
+    {
+      "id": "books",
+      "title": "도서 검색과 복본 상태",
+      "question": "신촌 도서관에서 그레고리 머과이어의 한국어 소설 '위키드' 1권을 찾아줘. 2024년판 한 자료의 신촌 복본 상태와 반납예정일, 원문 링크를 알려줘. 다른 판본까지 전부 집계할 필요는 없어.",
+      "started_at": "2026-09-30T03:25:08.696899+09:00",
+      "finished_at": "2026-09-30T03:25:21.596767+09:00",
+      "answer": "**『위키드』 1권: 엘파바와 글린다** — 그레고리 머과이어, 민음사, **2024년 3판**\n\n- **신촌 복본 상태:** 대출중  \n- **소장 위치:** 신촌도서관 인문자료실(중도 2층)\n- **청구기호:** 823 M276w 024가 -1\n- **반납예정일:** 2026-10-06\n- **원문 링크:** https://library.yonsei.ac.kr/search/detail/CATTOT000002223962",
+      "calls": [
+        {
+          "tool": "search_library_books",
+          "arguments": {
+            "query": "위키드 1 그레고리 머과이어 2024",
+            "campus": "sinchon",
+            "search_field": "all",
+            "limit": 10,
+            "page": 1,
+            "offset": 0
+          },
+          "result": {
+            "query": "위키드 1 그레고리 머과이어 2024",
+            "page": 1,
+            "offset": 0,
+            "count": 0,
+            "results": [],
+            "total": 0,
+            "displayed_total": 0,
+            "source_limited": false,
+            "total_pages": 0,
+            "page_size": 10,
+            "page_count": 0,
+            "truncated": false,
+            "has_next": false,
+            "next_page": null,
+            "next_request": null,
+            "page_limit_reached": false,
+            "filters": {
+              "campus": "sinchon",
+              "search_field": "all"
+            },
+            "filters_verified": true,
+            "source_url": "https://library.yonsei.ac.kr/search/tot/result?st=KWRD&si=TOTAL&q=%EC%9C%84%ED%82%A4%EB%93%9C+1+%EA%B7%B8%EB%A0%88%EA%B3%A0%EB%A6%AC+%EB%A8%B8%EA%B3%BC%EC%9D%B4%EC%96%B4+2024&pn=1&cpp=10&lmt0=YNLIB%3BGSISL%3BMUSEL%3BOTHER%3BUGSTL%3BYSLIB%3BARCHL%3BBUSIL%3BKORCL%3BIOKSL%3BLAWSL%3BMULTL%3BMATHL%3BMUSIC&lmtsn=000000000006&lmtst=OR",
+            "fetched_at": "2026-09-29T18:25:11.447756+00:00",
+            "note": "count/total은 자료 건수이며 복본 수가 아닙니다. 모든 결과가 필요하면 next_request를 그대로 이어 호출하세요. source_limited=true면 원문 자체가 일부만 제공합니다. truncated는 현재 페이지 내 생략을 뜻합니다. 페이지 사이 결과가 바뀔 수 있어 전체 수집 시 catalog_id로 중복/건수를 대조하세요."
+          }
+        },
+        {
+          "tool": "search_library_books",
+          "arguments": {
+            "query": "위키드",
+            "campus": "sinchon",
+            "search_field": "title",
+            "limit": 10,
+            "page": 1,
+            "offset": 0
+          },
+          "result": {
+            "query": "위키드",
+            "page": 1,
+            "offset": 0,
+            "count": 10,
+            "results": [
+              {
+                "title": "위키드 . 3, 리르 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2008",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000232184",
+                "catalog_id": "CATTOT000000232184",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 008가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 3, 리르 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2012 / 2판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000822433",
+                "catalog_id": "CATTOT000000822433",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 6, 오즈마 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2024 / 2판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000002235694",
+                "catalog_id": "CATTOT000002235694",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 024가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 5, 레인 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2024 / 2판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000002235693",
+                "catalog_id": "CATTOT000002235693",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 024가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 3, 리르 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2024 / 3판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000002235691",
+                "catalog_id": "CATTOT000002235691",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 024가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 5, 레인 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2012",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000829194",
+                "catalog_id": "CATTOT000000829194",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  },
+                  {
+                    "location": "[국제]언더우드기념도서관[UML 823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "international"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 6, 오즈마이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2013",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000850715",
+                "catalog_id": "CATTOT000000850715",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  },
+                  {
+                    "location": "[국제]언더우드기념도서관[UML 823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "international"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 4, 겁쟁이 사자 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2012",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000822434",
+                "catalog_id": "CATTOT000000822434",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 4, 겁쟁이 사자 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2024 / 2판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000002235692",
+                "catalog_id": "CATTOT000002235692",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 024가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 2, 서쪽 마녀 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2012 / 2판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000822432",
+                "catalog_id": "CATTOT000000822432",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  },
+                  {
+                    "location": "[국제]언더우드기념도서관[UML 823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "international"
+                  }
+                ]
+              }
+            ],
+            "total": 21,
+            "displayed_total": 21,
+            "source_limited": false,
+            "total_pages": 3,
+            "page_size": 10,
+            "page_count": 10,
+            "truncated": false,
+            "has_next": true,
+            "next_page": 2,
+            "next_request": {
+              "query": "위키드",
+              "page": 2,
+              "limit": 10,
+              "campus": "sinchon",
+              "search_field": "title",
+              "offset": 0
+            },
+            "page_limit_reached": false,
+            "filters": {
+              "campus": "sinchon",
+              "search_field": "title"
+            },
+            "filters_verified": true,
+            "source_url": "https://library.yonsei.ac.kr/search/tot/result?st=KWRD&si=1&q=%EC%9C%84%ED%82%A4%EB%93%9C&pn=1&cpp=10&lmt0=YNLIB%3BGSISL%3BMUSEL%3BOTHER%3BUGSTL%3BYSLIB%3BARCHL%3BBUSIL%3BKORCL%3BIOKSL%3BLAWSL%3BMULTL%3BMATHL%3BMUSIC&lmtsn=000000000006&lmtst=OR",
+            "fetched_at": "2026-09-29T18:25:15.748711+00:00",
+            "note": "count/total은 자료 건수이며 복본 수가 아닙니다. 모든 결과가 필요하면 next_request를 그대로 이어 호출하세요. source_limited=true면 원문 자체가 일부만 제공합니다. truncated는 현재 페이지 내 생략을 뜻합니다. 페이지 사이 결과가 바뀔 수 있어 전체 수집 시 catalog_id로 중복/건수를 대조하세요."
+          }
+        },
+        {
+          "tool": "search_library_books",
+          "arguments": {
+            "query": "위키드",
+            "campus": "sinchon",
+            "search_field": "title",
+            "limit": 10,
+            "page": 2,
+            "offset": 0
+          },
+          "result": {
+            "query": "위키드",
+            "page": 2,
+            "offset": 0,
+            "count": 10,
+            "results": [
+              {
+                "title": "위키드 . 1, 엘파바와 글린다",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2012 / 2판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000822398",
+                "catalog_id": "CATTOT000000822398",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  },
+                  {
+                    "location": "[국제]언더우드기념도서관[UML 823 M276w 012가]",
+                    "status": "대출가능",
+                    "campus": "international"
+                  }
+                ]
+              },
+              {
+                "title": "Wicked : the life and times of the Wicked Witch of the West : a novel",
+                "author": "Maguire, Gregory",
+                "publisher": "Regan Books",
+                "published_year": "1995",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000001844418",
+                "catalog_id": "CATTOT000001844418",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 95a]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "Wicked [녹음자료] : original cast recording",
+                "author": "Schwartz, Stephen",
+                "publisher": "Universal Music",
+                "published_year": "2013 / Deluxe Edition",
+                "material_type": "오디오",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000001813824",
+                "catalog_id": "CATTOT000001813824",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[CDS 782.14 Sch95w 013가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  },
+                  {
+                    "location": "[국제]언더우드기념도서관[UML(CDS) 782.14 Sch95w 013가]",
+                    "status": "대출가능",
+                    "campus": "international"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 1, 엘파바와 글린다",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2008",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000237458",
+                "catalog_id": "CATTOT000000237458",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 008가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 2, 서쪽마녀 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2008",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000000232169",
+                "catalog_id": "CATTOT000000232169",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 008가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "A lion among men : volume three in the wicked years",
+                "author": "Maguire, Gregory",
+                "publisher": "HarperLuxe",
+                "published_year": "2008",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000001588616",
+                "catalog_id": "CATTOT000001588616",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276L 008a]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 프라블럼 : 환경저널리스트 한삼희의 기후 난제 이야기",
+                "author": "한삼희",
+                "publisher": "궁리",
+                "published_year": "2016",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000001816843",
+                "catalog_id": "CATTOT000001816843",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[551.6 016누]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  },
+                  {
+                    "location": "[국제]언더우드기념도서관[UML 551.6 016거]",
+                    "status": "대출가능",
+                    "campus": "international"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 2, 서쪽 마녀 이야기",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2024 / 3판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000002223963",
+                "catalog_id": "CATTOT000002223963",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 024가]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              },
+              {
+                "title": "위키드 . 1, 엘파바와 글린다",
+                "author": "Maguire, Gregory",
+                "publisher": "민음사",
+                "published_year": "2024 / 3판",
+                "material_type": "단행본",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000002223962",
+                "catalog_id": "CATTOT000002223962",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[823 M276w 024가]",
+                    "status": "대출중",
+                    "campus": "sinchon"
+                  },
+                  {
+                    "location": "[국제]언더우드기념도서관[UML 823 M276w 024가]",
+                    "status": "대출가능",
+                    "campus": "international"
+                  }
+                ]
+              },
+              {
+                "title": "Performing transnational encounters : musical theater in South Korea",
+                "author": "김혜원",
+                "publisher": "Graduate School, Yonsei University",
+                "published_year": "2018",
+                "material_type": "학위논문",
+                "url": "https://library.yonsei.ac.kr/search/detail/CATTOT000001918374",
+                "catalog_id": "CATTOT000001918374",
+                "detail_supported": true,
+                "holdings": [
+                  {
+                    "location": "[신촌]도서관[학 420 018야]",
+                    "status": "대출가능",
+                    "campus": "sinchon"
+                  }
+                ]
+              }
+            ],
+            "total": 21,
+            "displayed_total": 21,
+            "source_limited": false,
+            "total_pages": 3,
+            "page_size": 10,
+            "page_count": 10,
+            "truncated": false,
+            "has_next": true,
+            "next_page": 3,
+            "next_request": {
+              "query": "위키드",
+              "page": 3,
+              "limit": 10,
+              "campus": "sinchon",
+              "search_field": "title",
+              "offset": 0
+            },
+            "page_limit_reached": false,
+            "filters": {
+              "campus": "sinchon",
+              "search_field": "title"
+            },
+            "filters_verified": true,
+            "source_url": "https://library.yonsei.ac.kr/search/tot/result?st=KWRD&si=1&q=%EC%9C%84%ED%82%A4%EB%93%9C&pn=2&cpp=10&lmt0=YNLIB%3BGSISL%3BMUSEL%3BOTHER%3BUGSTL%3BYSLIB%3BARCHL%3BBUSIL%3BKORCL%3BIOKSL%3BLAWSL%3BMULTL%3BMATHL%3BMUSIC&lmtsn=000000000006&lmtst=OR",
+            "fetched_at": "2026-09-29T18:25:18.487885+00:00",
+            "note": "count/total은 자료 건수이며 복본 수가 아닙니다. 모든 결과가 필요하면 next_request를 그대로 이어 호출하세요. source_limited=true면 원문 자체가 일부만 제공합니다. truncated는 현재 페이지 내 생략을 뜻합니다. 페이지 사이 결과가 바뀔 수 있어 전체 수집 시 catalog_id로 중복/건수를 대조하세요."
+          }
+        },
+        {
+          "tool": "get_library_book_detail",
+          "arguments": {
+            "catalog_id": "CATTOT000002223962"
+          },
+          "result": {
+            "catalog_id": "CATTOT000002223962",
+            "count": 2,
+            "copies": [
+              {
+                "reg_no": "00012257017",
+                "call_number": "823 M276w 024가 -1",
+                "location": "[신촌]도서관/인문자료실(중도2층)/",
+                "status_raw": "대출중",
+                "due_date_raw": "2026-10-06",
+                "campus": "sinchon"
+              },
+              {
+                "reg_no": "00071091865",
+                "call_number": "UML 823 M276w 024가 -1",
+                "location": "[국제]언더우드기념도서관/창의열람실(4층)/신간도서(UML ONLY)",
+                "status_raw": "대출가능",
+                "due_date_raw": "",
+                "campus": "international"
+              }
+            ],
+            "note": "소장자료 상세 화면의 복본 정보입니다. 빈 반납예정일의 의미를 추정하지 않습니다. 대출/예약 가능 여부는 방문 시 원문에서 재확인하세요.",
+            "source_url": "https://library.yonsei.ac.kr/search/detail/CATTOT000002223962",
+            "fetched_at": "2026-09-29T18:25:19.358822+00:00"
+          }
+        }
+      ]
+    },
+    {
+      "id": "seats",
+      "title": "도서관 PC석 조회",
+      "question": "도서관 PC석이 얼마나 남아 있어? 건물별 전체·사용 중·잔여석과 합계를 알려주고, 바로 배정받을 수 있다는 뜻인지도 설명해줘. 8줄 이내로 답해줘.",
+      "started_at": "2026-09-30T03:21:37.518699+09:00",
+      "finished_at": "2026-09-30T03:21:42.017504+09:00",
+      "answer": "PC석 현황(조회 시각 기준)  \n- 학술정보원: 전체 931석 · 사용 중 920석 · 잔여 11석  \n- 합계: 전체 931석 · 사용 중 920석 · 잔여 11석 (이용률 98.8%)  \n잔여 11석은 공개 집계이며, **바로 좌석을 배정받을 수 있다는 보장은 아닙니다.**  \n열람실별 실제 배정 가능 여부는 별도 좌석 시스템에서 달라질 수 있습니다.",
+      "calls": [
+        {
+          "tool": "get_library_seats",
+          "arguments": {
+            "seat_type": "pc"
+          },
+          "result": {
+            "rows": [
+              {
+                "building": "학술정보원",
+                "building_code": "yonsei",
+                "seat_type": "PC석",
+                "seat_type_code": "pc",
+                "total": 931,
+                "in_use": 920,
+                "remaining": 11,
+                "usage_pct": 98.8
+              }
+            ],
+            "total": 931,
+            "in_use": 920,
+            "remaining": 11,
+            "usage_pct": 98.8,
+            "source_url": "https://library.yonsei.ac.kr/seat/info",
+            "fetched_at": "2026-09-29T18:21:39.361661+00:00",
+            "availability_note": "공개 건물군 집계입니다. 열람실별 배정 가능 여부나 현재 착석 가능성을 보장하지 않습니다. 별도 좌석 시스템과 수치가 다를 수 있습니다."
+          }
+        }
+      ]
+    },
+    {
+      "id": "calendar",
+      "title": "공식 학사일정 확인",
+      "question": "현재 공개된 신촌·국제 학사일정에서 수강철회 기간과 중간·기말시험 기간을 찾아줘. 어느 연도·학기 자료인지, 내 개인 시험시간표인지도 알려줘. 8줄 이내로 답해줘.",
+      "started_at": "2026-09-30T03:21:42.017635+09:00",
+      "finished_at": "2026-09-30T03:21:46.114748+09:00",
+      "answer": "- **자료:** 현재 공개된 **2026학년도 2학기** 신촌·국제 학사일정입니다.  \n- **수강철회:** 2026년 **10월 13일(화)~15일(목)**  \n- **중간시험:** 2026년 **10월 20일(화)~26일(월)**  \n- **기말시험(학기말 시험):** 2026년 **12월 15일(화)~21일(월)**  \n- 이는 대학 전체의 공식 학사일정이며, **개인별 시험시간표는 아닙니다.** 개인 시험 일정은 학과·강좌 안내를 확인해야 합니다.",
+      "calls": [
+        {
+          "tool": "get_academic_calendar",
+          "arguments": {},
+          "result": {
+            "academic_year": 2026,
+            "semester": "second",
+            "count": 51,
+            "months": [
+              {
+                "display_year": 2026,
+                "month": 8,
+                "events": [
+                  {
+                    "date_raw": "03 (Mon)",
+                    "title": "2026-2학기 휴학 접수 시작"
+                  },
+                  {
+                    "date_raw": "10 (Mon) ~ 14 (Fri)",
+                    "title": "2026-2학기 수강신청"
+                  },
+                  {
+                    "date_raw": "15 (Sat)",
+                    "title": "광복절"
+                  },
+                  {
+                    "date_raw": "17 (Mon)",
+                    "title": "대체 휴일"
+                  },
+                  {
+                    "date_raw": "21 (Fri) ~ 27 (Thu)",
+                    "title": "2026-2학기 등록"
+                  },
+                  {
+                    "date_raw": "24 (Mon)",
+                    "title": "2026-2학기 복학 접수 마감"
+                  },
+                  {
+                    "date_raw": "25 (Tue)",
+                    "title": "2026-2학기 신입생 수강신청"
+                  },
+                  {
+                    "date_raw": "27 (Thu)",
+                    "title": "2026-2학기 2차 복학생 수강신청"
+                  },
+                  {
+                    "date_raw": "28 (Fri)",
+                    "title": "학위수여식"
+                  }
+                ]
+              },
+              {
+                "display_year": 2026,
+                "month": 9,
+                "events": [
+                  {
+                    "date_raw": "01 (Tue)",
+                    "title": "개강"
+                  },
+                  {
+                    "date_raw": "03 (Thu) ~ 07 (Mon)",
+                    "title": "수강신청 확인 및 변경"
+                  },
+                  {
+                    "date_raw": "03 (Thu)",
+                    "title": "교무위원회"
+                  },
+                  {
+                    "date_raw": "10 (Thu) ~ 14 (Mon)",
+                    "title": "2026-2학기 추가등록"
+                  },
+                  {
+                    "date_raw": "14 (Mon)",
+                    "title": "미등록자 일반휴학 접수 마감"
+                  },
+                  {
+                    "date_raw": "14 (Mon) ~ 18 (Fri)",
+                    "title": "조기졸업 신청"
+                  },
+                  {
+                    "date_raw": "24 (Thu) ~ 26 (Sat)",
+                    "title": "추석 연휴"
+                  }
+                ]
+              },
+              {
+                "display_year": 2026,
+                "month": 10,
+                "events": [
+                  {
+                    "date_raw": "01 (Thu)",
+                    "title": "교무위원회"
+                  },
+                  {
+                    "date_raw": "03 (Sat)",
+                    "title": "개천절"
+                  },
+                  {
+                    "date_raw": "05 (Mon)",
+                    "title": "대체 휴일"
+                  },
+                  {
+                    "date_raw": "07 (Wed)",
+                    "title": "학기 1/3선"
+                  },
+                  {
+                    "date_raw": "09 (Fri)",
+                    "title": "한글날"
+                  },
+                  {
+                    "date_raw": "13 (Tue) ~ 15 (Thu)",
+                    "title": "수강철회"
+                  },
+                  {
+                    "date_raw": "20 (Tue) ~ 26 (Mon)",
+                    "title": "중간시험"
+                  },
+                  {
+                    "date_raw": "27 (Tue) ~ 02 (Mon)",
+                    "title": "2027-1학기 캠퍼스내 소속변경 신청"
+                  },
+                  {
+                    "date_raw": "27 (Tue) ~ 29 (Thu)",
+                    "title": "S/U평가 신청"
+                  }
+                ]
+              },
+              {
+                "display_year": 2026,
+                "month": 11,
+                "events": [
+                  {
+                    "date_raw": "27 (Tue) ~ 02 (Mon)",
+                    "title": "2027-1학기 캠퍼스내 소속변경 신청"
+                  },
+                  {
+                    "date_raw": "05 (Thu)",
+                    "title": "교무위원회"
+                  },
+                  {
+                    "date_raw": "13 (Fri)",
+                    "title": "학기 2/3선, 일반휴학 접수 마감"
+                  },
+                  {
+                    "date_raw": "15 (Sun)",
+                    "title": "추수감사절"
+                  },
+                  {
+                    "date_raw": "16 (Mon)",
+                    "title": "질병휴학 접수시작"
+                  },
+                  {
+                    "date_raw": "23 (Mon) ~ 04 (Fri)",
+                    "title": "2027-1학기 재입학 신청"
+                  },
+                  {
+                    "date_raw": "24 (Tue) ~ 30 (Mon)",
+                    "title": "2027학년도 캠퍼스간 소속변경 신청"
+                  }
+                ]
+              },
+              {
+                "display_year": 2026,
+                "month": 12,
+                "events": [
+                  {
+                    "date_raw": "03 (Thu)",
+                    "title": "교무위원회, 성탄절 예배"
+                  },
+                  {
+                    "date_raw": "23 (Mon) ~ 04 (Fri)",
+                    "title": "2027-1학기 재입학 신청"
+                  },
+                  {
+                    "date_raw": "08 (Tue) ~ 14 (Mon)",
+                    "title": "자율학습 및 보충수업 기간"
+                  },
+                  {
+                    "date_raw": "15 (Tue) ~ 21 (Mon)",
+                    "title": "학기말 시험"
+                  },
+                  {
+                    "date_raw": "22 (Tue) ~ 28 (Mon)",
+                    "title": "2027-1학기 캠퍼스내 복수전공·융복합전공·융합심화전공 신청"
+                  },
+                  {
+                    "date_raw": "22 (Tue)",
+                    "title": "겨울방학시작"
+                  },
+                  {
+                    "date_raw": "25 (Fri)",
+                    "title": "성탄절"
+                  },
+                  {
+                    "date_raw": "28 (Mon)",
+                    "title": "겨울계절제 수업 시작, 2026-2학기 성적제출 마감"
+                  }
+                ]
+              },
+              {
+                "display_year": 2027,
+                "month": 1,
+                "events": [
+                  {
+                    "date_raw": "01 (Fri)",
+                    "title": "신정"
+                  },
+                  {
+                    "date_raw": "11 (Mon)",
+                    "title": "2027-1학기 복학 접수 시작"
+                  },
+                  {
+                    "date_raw": "19 (Tue)",
+                    "title": "겨울계절제 수업 종료"
+                  }
+                ]
+              },
+              {
+                "display_year": 2027,
+                "month": 2,
+                "events": [
+                  {
+                    "date_raw": "01 (Mon)",
+                    "title": "2027-1학기 휴학 접수 시작"
+                  },
+                  {
+                    "date_raw": "06 (Sat) ~ 08 (Mon)",
+                    "title": "설 연휴"
+                  },
+                  {
+                    "date_raw": "09 (Tue)",
+                    "title": "대체 휴일"
+                  },
+                  {
+                    "date_raw": "15 (Mon) ~ 19 (Fri)",
+                    "title": "2027-1학기 수강신청"
+                  },
+                  {
+                    "date_raw": "21 (Sun)",
+                    "title": "졸업예배"
+                  },
+                  {
+                    "date_raw": "22 (Mon)",
+                    "title": "학위수여식, 2027-1학기 복학 접수 마감"
+                  },
+                  {
+                    "date_raw": "23 (Tue)",
+                    "title": "2027-1학기 신입생 수강신청"
+                  },
+                  {
+                    "date_raw": "25 (Thu)",
+                    "title": "2027-1학기 2차 복학생 수강신청"
+                  }
+                ]
+              }
+            ],
+            "source_url": "https://www.yonsei.ac.kr/sc/373/subview.do",
+            "date_note": "날짜 구간은 원문 그대로입니다. 월 경계 항목은 여러 월에 반복 표시될 수 있으며 display_year/month는 표시 구간이지 모든 이벤트의 시작 월이 아닙니다. 개인별 수업/시험은 해당 학과 안내를 확인하세요.",
+            "fetched_at": "2026-09-29T18:21:43.779875+00:00"
+          }
+        }
+      ]
+    }
+  ]
+}

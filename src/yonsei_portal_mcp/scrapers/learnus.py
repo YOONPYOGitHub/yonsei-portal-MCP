@@ -91,14 +91,18 @@ _NOTICE_BODY_JS = r"""
     return null;
   };
   const titleEl = pick(['.boardTitle', '.ubboard_title', 'h3', 'h2', '.page-header-headings h1']);
-  const bodyEl = pick(['.text_to_html', '.boardContent', '.ubboard_content', '#region-main .box', '#region-main']);
+    const bodyEl = document.querySelector('.text_to_html, .boardContent, .ubboard_content');
+    const body = bodyEl ? (bodyEl.innerText || bodyEl.textContent || '').replace(/\n{3,}/g, '\n\n').trim() : '';
+    const imageCount = bodyEl ? bodyEl.querySelectorAll('img').length : 0;
+    if (!bodyEl || (!body && !imageCount)) return null;
   const metaText = (pick(['.boardInfo', '.ubboard_info', '.author']) || {}).innerText || '';
     const dateMatch = metaText.match(/(?<!\d)\d{4}([-./])\s*\d{1,2}\1\s*\d{1,2}(?!\d)/);
   return {
     title: titleEl ? (titleEl.innerText || titleEl.textContent || '').replace(/\s+/g, ' ').trim() : null,
     author: (metaText.split('\n')[0] || '').replace(/\s+/g, ' ').trim() || null,
     date: dateMatch ? dateMatch[0] : null,
-    body: bodyEl ? (bodyEl.innerText || bodyEl.textContent || '').replace(/\n{3,}/g, '\n\n').trim() : null,
+    body,
+    image_count: imageCount,
   };
 }
 """
@@ -493,15 +497,23 @@ async def fetch_notice_body(page: Page, url: str) -> dict:
             "url 은 fetch_notices 가 돌려준 LearnUs 게시글 주소여야 합니다."
         )
     await _goto_korean(page, url)
-    await page.wait_for_timeout(500)
+    try:
+        await page.wait_for_function(f"() => ({_NOTICE_BODY_JS})() !== null", timeout=15_000)
+    except PlaywrightTimeoutError as exc:
+        raise ScrapeFailedError("LearnUs 공지 본문을 확인하지 못했습니다.") from exc
     _require_page_url(page.url, url)
     data = await page.evaluate(_NOTICE_BODY_JS)
+    if not isinstance(data, dict):
+        raise ScrapeFailedError("LearnUs 공지 본문 구조를 확인하지 못했습니다.")
+    image_count = data.get("image_count", 0)
     return {
         "url": _korean_url(url),
         "title": (data or {}).get("title"),
         "date": _norm_date((data or {}).get("date")),
         "author": (data or {}).get("author"),
         "body": (data or {}).get("body"),
+        "image_count": image_count,
+        "note": "이미지 내용은 텍스트로 추출하지 않았습니다. 원문을 확인하세요." if image_count else None,
     }
 
 

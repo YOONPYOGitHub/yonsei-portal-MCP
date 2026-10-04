@@ -13,23 +13,23 @@ from yonsei_portal_mcp.scrapers import seats  # noqa: E402
 
 def _check_shape(result: dict) -> None:
     assert isinstance(result, dict), "result must be a dict"
-    for k in ("rows", "total", "in_use", "remaining", "usage_pct"):
-        assert k in result, f"missing top-level key: {k}"
-    assert isinstance(result["rows"], list) and result["rows"], "rows empty"
-    for r in result["rows"]:
-        for k in (
+    assert isinstance(result["rows"], list)
+    assert result["semantics_verified"] is False
+    assert result["scope"] == "public_widget_api"
+    for item in [result, *result["rows"]]:
+        assert all(item[key] is None for key in ("in_use", "remaining", "usage_pct"))
+        assert all(type(item[key]) is int and item[key] >= 0 for key in ("total", "raw_use", "raw_total_minus_use"))
+        assert item["total"] == item["raw_use"] + item["raw_total_minus_use"]
+    for row in result["rows"]:
+        for field in (
             "building",
             "building_code",
             "seat_type",
             "seat_type_code",
-            "total",
-            "in_use",
-            "remaining",
-            "usage_pct",
         ):
-            assert k in r, f"row missing key: {k}"
-        assert r["remaining"] == max(r["total"] - r["in_use"], 0), "remaining math"
-        assert 0 <= r["usage_pct"] <= 100, "usage_pct range"
+            assert field in row, f"row missing key: {field}"
+    for field in ("total", "raw_use", "raw_total_minus_use"):
+        assert result[field] == sum(row[field] for row in result["rows"])
 
 
 async def main() -> None:
@@ -37,19 +37,19 @@ async def main() -> None:
     _check_shape(result)
     print(
         f"ALL: {len(result['rows'])} rows, "
-        f"total={result['total']} in_use={result['in_use']} "
-        f"remaining={result['remaining']} usage={result['usage_pct']}%"
+        f"raw total={result['total']} raw_use={result['raw_use']} "
+        "occupancy/availability=UNKNOWN"
     )
-    for r in result["rows"]:
+    for row in result["rows"]:
         print(
-            f"  {r['building']}/{r['seat_type']}: "
-            f"{r['in_use']}/{r['total']} ({r['usage_pct']}%)"
+            f"  {row['building']}/{row['seat_type']}: "
+            f"raw_use={row['raw_use']} raw_total={row['total']}"
         )
 
     # Filtered view consistency.
     pc = await seats.fetch_seats("pc")
-    _check_shape(pc) if pc["rows"] else None
-    assert all(r["seat_type_code"] == "pc" for r in pc["rows"]), "filter leaked"
+    _check_shape(pc)
+    assert all(row["seat_type_code"] == "pc" for row in pc["rows"]), "filter leaked"
     print(f"PC filter: {len(pc['rows'])} rows, total={pc['total']}")
 
     print("SEATS SMOKE TEST PASSED")

@@ -435,11 +435,15 @@ class ErpSession(BrowserSession):
 
         # Unauthenticated visits land directly on the infra SSO form.
         try:
-            await page.wait_for_selector("#loginId", timeout=nav_timeout)
+            await page.locator("#loginId").or_(
+                page.get_by_text("로그아웃", exact=False)
+            ).first.wait_for(timeout=nav_timeout)
         except PlaywrightTimeoutError as exc:
             raise ScrapeFailedError(
-                "연세 통합 로그인 폼(#loginId)을 제시간 내에 불러오지 못했습니다."
+                "ERP 로그인 폼 또는 인증 화면을 제시간 내에 불러오지 못했습니다."
             ) from exc
+        if await self._is_authenticated(page):
+            return
         await page.fill("#loginId", self.settings.yonsei_id)
         await page.fill("#loginPasswd", self.settings.yonsei_password)
         await page.evaluate("fSubmitSSOLoginForm()")

@@ -1,10 +1,9 @@
 """Public (no-login) library seat availability.
 
-The library home page's seat widget calls ``GET /seat/info`` which returns a
-campus-level aggregate as JSON **without authentication**. We expose that as a
-zero-friction tool via the lightweight httpx path (no browser). Granularity is
-limited to *building-group × seat-type* totals; per-reading-room drill-down
-requires login (handled separately).
+The homepage widget calls ``POST /seat/info``; GET also returns public JSON.
+Its displayed columns conflict with the API key names. Preserve raw values
+without claiming that ``use`` means occupied or available seats. The separate
+authenticated reading-room table provides verified displayed availability.
 
 No PII is involved.
 """
@@ -22,7 +21,7 @@ _BUILDINGS = {
     "center": "중앙도서관",
     "yonsei": "학술정보원",
 }
-# Seat-type suffixes -> label (추정; site exposes only the English keys).
+# Homepage seat-type labels; occupancy semantics remain unverified.
 _SEAT_TYPES = {
     "general": "일반열람석",
     "pc": "PC석",
@@ -31,8 +30,15 @@ _SEAT_TYPES = {
 }
 
 
-def _pct(use: int, total: int) -> float:
-    return round(use / total * 100, 1) if total else 0.0
+def _summarize(rows: list[dict]) -> dict:
+    total = sum(row["total"] for row in rows)
+    raw_use = sum(row["raw_use"] for row in rows)
+    return {
+        "rows": rows, "total": total, "raw_use": raw_use,
+        "raw_total_minus_use": total - raw_use,
+        "in_use": None, "remaining": None, "usage_pct": None,
+        "semantics_verified": False, "scope": "public_widget_api",
+    }
 
 
 def _parse(data: dict) -> dict:
@@ -47,10 +53,9 @@ def _parse(data: dict) -> dict:
             total = data[f"{bkey}_{tkey}_total"]
             use = data[f"{bkey}_{tkey}_use"]
             if use > total:
-                raise ScrapeFailedError("공개 좌석 사용중 수가 전체좌석보다 큽니다.")
+                raise ScrapeFailedError("공개 좌석 원문 use 값이 total보다 큽니다.")
             if total == 0 and use == 0:
                 continue  # category not offered in this building
-            remaining = max(total - use, 0)
             rows.append(
                 {
                     "building": bname,
@@ -58,21 +63,15 @@ def _parse(data: dict) -> dict:
                     "seat_type": tname,
                     "seat_type_code": tkey,
                     "total": total,
-                    "in_use": use,
-                    "remaining": remaining,
-                    "usage_pct": _pct(use, total),
+                    "raw_use": use,
+                    "raw_total_minus_use": total - use,
+                    "in_use": None,
+                    "remaining": None,
+                    "usage_pct": None,
                 }
             )
 
-    t_total = sum(r["total"] for r in rows)
-    t_use = sum(r["in_use"] for r in rows)
-    return {
-        "rows": rows,
-        "total": t_total,
-        "in_use": t_use,
-        "remaining": max(t_total - t_use, 0),
-        "usage_pct": _pct(t_use, t_total),
-    }
+    return _summarize(rows)
 
 
 async def fetch_seats(seat_type: str | None = None) -> dict:
@@ -82,29 +81,24 @@ async def fetch_seats(seat_type: str | None = None) -> dict:
     the ``rows`` to a single category; aggregate totals are recomputed for the
     filtered view.
     """
-    data = await httpclient.get_json(LIBRARY_SEAT_INFO_URL)
-    result = _parse(data)
-
-    if seat_type:
+    code = None
+    if seat_type is not None and seat_type != "":
+        if not isinstance(seat_type, str):
+            raise ValueError("seat_type은 지원 좌석 유형 문자열이어야 합니다.")
         wanted = seat_type.strip().lower()
-        code = wanted
         for tkey, tname in _SEAT_TYPES.items():
             if wanted in (tkey, tname.lower()):
                 code = tkey
                 break
-        rows = [r for r in result["rows"] if r["seat_type_code"] == code]
-        t_total = sum(r["total"] for r in rows)
-        t_use = sum(r["in_use"] for r in rows)
-        result = {
-            "rows": rows,
-            "total": t_total,
-            "in_use": t_use,
-            "remaining": max(t_total - t_use, 0),
-            "usage_pct": _pct(t_use, t_total),
-        }
+        if code is None:
+            raise ValueError("seat_type은 general/pc/study/notebook 또는 해당 한글 유형명이어야 합니다.")
+    data = await httpclient.get_json(LIBRARY_SEAT_INFO_URL)
+    result = _parse(data)
+    if code is not None:
+        result = _summarize([row for row in result["rows"] if row["seat_type_code"] == code])
     result.update(
         source_url=LIBRARY_SEAT_INFO_URL,
         fetched_at=datetime.now(timezone.utc).isoformat(),
-        availability_note="공개 건물군 집계입니다. 열람실별 배정 가능 여부나 현재 착석 가능성을 보장하지 않습니다. 별도 좌석 시스템과 수치가 다를 수 있습니다.",
+        availability_note="공개 API use와 홈페이지 사용/잔여 칸의 의미가 충돌해 검증되지 않았습니다. raw_use와 raw_total_minus_use를 사용중/잔여석으로 해석하지 마세요. in_use/remaining/usage_pct는 미확인 null입니다. 열람실별 표시 현황은 로그인 후 get_library_seat_rooms로 확인하세요. 두 원천의 범위가 같다는 보장은 없습니다.",
     )
     return result

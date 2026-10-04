@@ -184,7 +184,7 @@ async def get_notice(url: str) -> dict:
     url은 get_lms_notices 또는 get_library_notices가 돌려준 HTTPS 게시글 URL입니다.
     LearnUs는 로그인 필요, 도서관 일반공지는 무로그인 HTTP입니다. 반환값은 제목(title),
     작성일(date), 작성자(author), 본문(body), url 을 포함하며, 요약은 호출하는
-    LLM이 수행합니다. 도서관 작성자는 제외하며 image_count와 note를 제공합니다.
+    LLM이 수행합니다. 도서관 작성자는 제외합니다. 두 경로 모두 image_count와 note를 제공합니다.
     이미지 속 안내는 읽지 못하므로 내용을 추측하지 말고 원문 확인을 안내하세요.
     """
     parsed = urlsplit(url)
@@ -340,15 +340,16 @@ async def export_calendar_ics(
 
 @mcp.tool()
 async def get_library_seats(seat_type: Optional[str] = None) -> dict:
-    """연세대학교 도서관의 실시간 좌석 현황(로그인 불필요)을 반환합니다.
+    """도서관 공개 좌석 API의 원문 수치를 반환합니다(로그인 불필요, 의미 미검증).
 
-    건물군(중앙도서관/학술정보원) × 좌석유형(일반열람석/PC석/스터디룸/노트북석)
-    단위 집계입니다. 각 항목: 건물(building), 좌석유형(seat_type), 총좌석(total),
-    사용중(in_use), 남은좌석(remaining), 이용률%(usage_pct). 최상위에 전체 합계와
-    이용률도 포함됩니다. seat_type 을 주면 해당 유형만 필터합니다(예: "pc",
-    "general", "study", "notebook"). 개별 열람실 단위는 로그인이 필요합니다.
-    source_url, fetched_at을 제공하며 60초 캐시입니다. remaining은 공개 집계일 뿐
-    배정 가능 좌석이 아닙니다. 별도 열람실 시스템과 범위/갱신 상태가 달라 합치면 안 됩니다.
+    API의 use와 홈페이지 사용/잔여 칸이 충돌하므로 semantics_verified=false이며,
+    in_use/remaining/usage_pct는 null입니다. raw_use와 raw_total_minus_use를
+    사용중이나 잔여석으로 바꾸어 답하거나 가용 좌석을 추측하지 마세요.
+    rows에는 building/building_code, seat_type/seat_type_code, 원문 total과 raw 값이
+    있습니다. 최상위에도 같은 합계·미확인 상태, scope, source_url, fetched_at,
+    availability_note가 있습니다. total도 공개 API 범위의 값이지 전체 열람실 수용력 보증이 아닙니다.
+    seat_type은 general/pc/study/notebook 또는 해당 한글 유형명입니다. 60초 캐시입니다.
+    열람실별 사용·잔여·배정 상태가 필요하면 로그인 도구 get_library_seat_rooms를 사용하세요.
     """
     key = ("get_library_seats", seat_type)
     return await cache.cached(

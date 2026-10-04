@@ -96,7 +96,9 @@ async def test_all_read_tools_over_stdio() -> None:
                 scoped_valid = scoped["requested_filters"] == {"year": 2026, "term_code": "10", "campus_code": "s3"} and all(str(row["year"]) == "2026" and row["term_code"] == "10" and row["campus_code"] == "s3" for row in scoped["courses"])
                 assert scoped_valid, "Catalog scoped result differs from requested filters"
                 history = await invoke("get_lms_course_history", {}, dict, ("courses", "count", "has_pagination"))
-                await invoke("get_library_seats", {}, dict)
+                public_seats = await invoke("get_library_seats", {}, dict)
+                assert public_seats["semantics_verified"] is False
+                assert public_seats["in_use"] is None and public_seats["remaining"] is None
                 seats = await invoke("get_library_seat_rooms", {}, dict, ("rooms", "count", "assignable_available", "source_totals_match"))
                 valid_seats = seats["source_totals_match"] is True and all(room["name"] != "합계" for room in seats["rooms"])
                 assert valid_seats, "Seat rooms must exclude source total and reconcile totals"
@@ -153,6 +155,79 @@ async def test_all_read_tools_over_stdio() -> None:
                 assignment_id = parse_qs(urlsplit(found_assignment["url"]).query)["id"][0]
                 await invoke("get_lms_assignment_status", {"assignment_id": assignment_id}, dict, ("submission_status", "grading_status_raw", "due_raw", "fetched_at"))
                 assert registered == checked, "Not all registered MCP tools were exercised"
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_learnus_core_fields_match_source() -> None:
+    if os.getenv("RUN_LIVE_PORTAL") != "1":
+        pytest.skip("set RUN_LIVE_PORTAL=1 for LearnUs source comparison")
+    from datetime import datetime
+    from yonsei_portal_mcp.scrapers import learnus
+    from yonsei_portal_mcp.session import get_session
+
+    def require(condition, message):
+        if not condition:
+            pytest.fail(message + " (payload suppressed)", pytrace=False)
+
+    async def check(page):
+        courses = await learnus.fetch_courses(page)
+        raw_courses = await page.locator('a[href*="/course/view.php?id="]').evaluate_all(
+            r"links=>links.map(link=>{const box=link.closest('li')||link.parentElement;return {id:new URL(link.href).searchParams.get('id'),name:(box.querySelector('h3')||link).textContent.replace(/\s+/g,' ').trim(),url:link.href.split('#')[0],text:box.innerText.replace(/\s+/g,' ').trim()}})"
+        )
+        indexed = {item["id"]: item for item in reversed(raw_courses) if item["text"]}
+        require(bool(courses) and {item["id"] for item in courses} == set(indexed), "Course inventory mismatch")
+        for course in courses:
+            source = indexed[course["id"]]
+            require(course["name"] == source["name"] and course["url"] == source["url"], "Course fields mismatch")
+            require(all(course[field] is None or str(course[field]) in source["text"] for field in ("code", "professor", "category")), "Course derived fields absent from source")
+        notices = await learnus.fetch_notices(page)
+        raw_notices = await page.locator('a[href*="/mod/ubboard/article.php"]').evaluate_all(
+            r"links=>links.map(link=>({url:link.href.split('#')[0],text:(link.innerText||link.textContent).replace(/\s+/g,' ').trim()}))"
+        )
+        indexed_notices = {item["url"]: item["text"] for item in reversed(raw_notices) if item["text"]}
+        require({item["url"] for item in notices} == set(indexed_notices), "Notice inventory mismatch")
+        require(all(item["title"] in indexed_notices[item["url"]] and (item["course"] is None or item["course"] in indexed_notices[item["url"]]) for item in notices), "Notice text mismatch")
+        deadlines = await learnus.fetch_deadlines(page, {item["id"]: item["name"] for item in courses})
+        raw_deadlines = await page.locator('[data-region="event-item"]').evaluate_all(
+            r"items=>items.map(item=>{const link=item.querySelector('a[data-action=" + '"view-event"' + r"]')||item.querySelector('a[href]');return {url:link?link.href:null,title:(link?link.textContent:item.innerText).replace(/\s+/g,' ').trim(),when:item.querySelector('.date')?.textContent.replace(/\s+/g,' ').trim()||null}})"
+        )
+        require(len(deadlines) == len({item["url"] for item in raw_deadlines}), "Calendar event count mismatch")
+        for item in deadlines:
+            source = next(row for row in raw_deadlines if row["url"] == item["url"])
+            require(item["title"] == source["title"] and item["due_text"] == source["when"], "Calendar source fields mismatch")
+            epoch = parse_qs(urlsplit(item["url"]).query).get("time") if item["url"] else None
+            require((int(datetime.fromisoformat(item["due"]).timestamp()) == int(epoch[0])) if epoch else item["due"] is None, "Calendar timestamp mismatch")
+        course_id = courses[0]["id"]
+        attendance = await learnus.fetch_attendance(page, course_id)
+        table = await page.locator('table.user_progress_table tr').evaluate_all(r"rows=>rows.map(row=>[...row.querySelectorAll('th,td')].map(cell=>cell.innerText.replace(/\s+/g,' ').trim())).filter(row=>row.some(Boolean))")
+        expected = [{(table[0][index] if index < len(table[0]) and table[0][index] else f"col{index}"): value for index, value in enumerate(row)} for row in table[1:]]
+        require(attendance["header"] == table[0] and attendance["weeks"] == expected, "Attendance columns/rows mismatch")
+        materials = await learnus.fetch_course_materials(page, course_id)
+        raw_activities = await page.locator('.course-content li.activity').evaluate_all(
+            r"items=>items.map(item=>{const link=item.querySelector('a[href]');const name=item.querySelector('.instancename')?.cloneNode(true);if(name)name.querySelectorAll('.accesshide').forEach(node=>node.remove());return {type:[...item.classList].find(value=>value.startsWith('modtype_'))?.slice(8)||null,title:(name?.textContent||link?.textContent||'').replace(/\s+/g,' ').trim(),url:link?link.href.split('#')[0]:null}}).filter(item=>item.title||item.url)"
+        )
+        actual = [activity for section in materials["sections"] for activity in section["activities"]]
+        require(actual == raw_activities and len(actual) == materials["activity_count"], "Material activity fields mismatch")
+        assignments = learnus.assignments_from_materials(materials)
+        require(assignments["count"] == sum(item["type"] == "assign" for item in actual), "Assignment type/count mismatch")
+        require(bool(notices), "Need one notice for body comparison")
+        body = await learnus.fetch_notice_body(page, notices[0]["url"])
+        require(body["title"] == notices[0]["title"], "Notice body title differs from listing")
+        require(bool(body["body"]) or body["image_count"] > 0, "Notice body missing")
+        source_body = page.locator('.text_to_html, .boardContent, .ubboard_content').first
+        require(body["image_count"] == await source_body.locator('img').count(), "Notice image count mismatch")
+        original_body = await source_body.inner_text()
+        require(body["body"] == __import__("re").sub(r"\n{3,}", "\n\n", original_body).strip(), "Notice body text mismatch")
+        print(f"LearnUs source: courses={len(courses)}, notices={len(notices)}, deadlines={len(deadlines)}, attendance_rows={len(expected)}, activities={len(actual)}", flush=True)
+
+    session = get_session()
+    try:
+        await session.run(check)
+    except Exception as exc:
+        pytest.fail(f"LearnUs core source comparison: {type(exc).__name__} (payload suppressed)", pytrace=False)
+    finally:
+        await session.close()
 
 
 @pytest.mark.live
@@ -357,8 +432,9 @@ async def test_library_fields_match_rendered_source() -> None:
         checks = []
         for row in result["rows"]:
             prefix = row["building_code"] + "_" + row["seat_type_code"]
-            checks.extend([row["total"] == raw[prefix + "_total"], row["in_use"] == raw[prefix + "_use"], row["remaining"] == raw[prefix + "_total"] - raw[prefix + "_use"]])
-        checks.append(result["remaining"] == sum(row["remaining"] for row in result["rows"]))
+            checks.extend([row["total"] == raw[prefix + "_total"], row["raw_use"] == raw[prefix + "_use"], row["raw_total_minus_use"] == raw[prefix + "_total"] - raw[prefix + "_use"], row["in_use"] is None, row["remaining"] is None])
+        checks.append(result["raw_use"] == sum(row["raw_use"] for row in result["rows"]))
+        checks.extend([result["semantics_verified"] is False, result["remaining"] is None])
         if not all(checks):
             pytest.fail("Public seat source mismatch", pytrace=False)
 
@@ -410,6 +486,76 @@ async def test_library_fields_match_rendered_source() -> None:
         pytest.fail(f"Library source comparison: {type(exc).__name__} (payload suppressed)", pytrace=False)
     finally:
         await session.close()
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+@pytest.mark.parametrize("predecessor", [None, "get_my_timetable", None], ids=["profile-first-1", "after-timetable", "profile-first-2"])
+async def test_profile_over_fresh_stdio_process(predecessor) -> None:
+    if os.getenv("RUN_LIVE_PORTAL") != "1":
+        pytest.skip("set RUN_LIVE_PORTAL=1 for profile startup verification")
+    from tests.llm.mcp_host import call_result_to_text, stdio_client_session
+
+    failure = None
+    try:
+        async with stdio_client_session() as session:
+            if predecessor is not None:
+                prior = await session.call_tool(predecessor, {})
+                if prior.isError:
+                    raise ValueError("Preceding ERP query failed")
+            response = await session.call_tool("get_student_profile", {})
+            if response.isError:
+                raise ValueError("Profile query failed")
+            payload = json.loads(call_result_to_text(response))
+            payload = payload.get("result", payload)
+            valid = (
+                bool(payload.get("department"))
+                and isinstance(payload.get("terms"), list)
+                and {"department_full", "department_code", "current_term", "current_term_credits"} <= payload.keys()
+                and payload.get("pii_included") is False
+                and "name" not in payload and "student_no" not in payload
+            )
+            if not valid:
+                raise ValueError("Profile response contract mismatch")
+    except Exception as exc:
+        failure = type(exc).__name__
+    if failure is not None:
+        pytest.fail(f"Fresh-process profile verification: {failure} (payload suppressed)", pytrace=False)
+
+
+@pytest.mark.live
+@pytest.mark.asyncio
+async def test_profile_fields_match_source_without_retry() -> None:
+    if os.getenv("RUN_LIVE_PORTAL") != "1":
+        pytest.skip("set RUN_LIVE_PORTAL=1 for profile source verification")
+    from yonsei_portal_mcp.scrapers import erp
+    from yonsei_portal_mcp.session import get_erp_session
+
+    session = get_erp_session()
+    failure = None
+    try:
+        async with session.page() as page:
+            async with page.expect_response(lambda response: urlsplit(response.url).path.endswith("/findMyGLIOList.do")) as profile_response, page.expect_response(lambda response: urlsplit(response.url).path.endswith("/findAccpsStdSchdlList.do")) as terms_response:
+                result = await erp.fetch_student_profile(page)
+            profile = (await (await profile_response.value).json())["dmGlio"]
+            terms = (await (await terms_response.value).json())["dsSyySmtDivCd"]
+            mapping = {"userNm": "name", "persNo": "student_no", "deptNm": "department", "deptTtNm": "department_full", "deptCd": "department_code"}
+            matches = isinstance(profile, dict) and isinstance(terms, list) and all(result[field] == profile.get(source) for source, field in mapping.items())
+            expected_terms = [{"term": row.get("fullNm"), "year": row.get("syy"), "code": row.get("code"), "credits": row.get("cdtTot")} for row in terms]
+            latest = sorted(terms, key=lambda row: str(row.get("code", "")))[-1] if terms else {}
+            matches = (
+                matches and result["terms"] == expected_terms
+                and result["current_term"] == latest.get("fullNm")
+                and result["current_term_credits"] == latest.get("cdtTot")
+            )
+            if not matches:
+                raise ValueError("Profile fields differ from source responses")
+    except Exception as exc:
+        failure = type(exc).__name__
+    finally:
+        await session.close()
+    if failure is not None:
+        pytest.fail(f"Profile source verification: {failure} (payload suppressed)", pytrace=False)
 
 
 @pytest.mark.live
