@@ -374,6 +374,7 @@ Node.js와 패키지 다운로드가 필요한 별도 도구입니다. Inspector
 | 필요한 내용 | 문서 |
 | --- | --- |
 | 실제 질문·답변 캡처·결과 해석 | [docs/USAGE.md](docs/USAGE.md) |
+| 기능별 질문 데이터셋·비공개 답변/근거 기록 | [docs/evaluation/README.md](docs/evaluation/README.md) |
 | 38개 도구의 인자·반환값·캐시·예제 | [docs/TOOLS.md](docs/TOOLS.md) |
 | 개발 환경·테스트·LLM 하니스·릴리스 준비 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |
 | 기여 절차·회귀 테스트·공개 PR 원칙 | [CONTRIBUTING.md](CONTRIBUTING.md) |
