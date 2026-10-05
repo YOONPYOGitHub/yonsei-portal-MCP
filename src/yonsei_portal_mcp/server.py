@@ -332,14 +332,16 @@ async def get_my_loans() -> dict:
 async def export_calendar_ics(
     include_loans: bool = True, course_id: Optional[str] = None
 ) -> str:
-    """다가오는 과제 마감일(과 도서 반납예정일)을 iCalendar(.ics) 텍스트로 반환합니다.
+    """LearnUs 예정된 마감과 선택적 도서 반납일을 일회성 iCalendar 텍스트로 반환합니다.
 
-    반환된 문자열을 ``.ics`` 파일로 저장하면 Google/Apple/Outlook 캘린더에서
-    바로 구독·가져오기할 수 있습니다. LearnUs 마감일은 시각 이벤트로,
-    도서 반납예정일은 종일 이벤트로 들어갑니다.
+    LearnUs에는 제출 과제 외에 progress(진도 종료), completion(수료 권장일)도
+    포함될 수 있으므로 모든 이벤트를 제출 과제라고 설명하지 마세요. LMS 마감은
+    UTC DTSTART 한 시점이며 DTEND/DURATION은 없습니다. 도서 반납일은 종일 이벤트입니다.
+    해석할 수 없는 날짜는 내보내기에서 제외될 수 있으며 빈 ICS가 일정 없음의 증거는 아닙니다.
 
-    course_id 를 주면 해당 강좌의 마감일만 포함합니다. include_loans=False 면
-    도서관 로그인을 건너뛰고 LMS 마감일만 내보냅니다.
+    course_id는 LMS 마감에만 적용되며 도서 반납일에는 적용되지 않습니다.
+    include_loans=False이면 도서관 로그인을 건너뜁니다. 반환 텍스트를 파일로 저장해
+    캘린더에 가져올 수 있지만, 구독 주소·자동 동기화·파일 저장·업로드는 이 도구가 수행하지 않습니다.
     """
     if course_id is not None:
         boards.validate_id(course_id)
