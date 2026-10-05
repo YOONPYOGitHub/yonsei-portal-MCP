@@ -1359,7 +1359,7 @@ wheels = [
 
 [[package]]
 name = "yonsei-portal-mcp"
-version = "0.6.0b1"
+version = "0.6.0b2"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

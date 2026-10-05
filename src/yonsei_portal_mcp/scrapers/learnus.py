@@ -156,24 +156,34 @@ _ATTENDANCE_JS = r"""
 _MATERIALS_JS = r"""
 () => {
   const sections = [];
+  const sectionSelector = 'li.section, .section.main, li[id^="section-"]';
   const secs = document.querySelectorAll(
-    '.course-content li.section, .course-content .section.main, li[id^="section-"]'
+    '.course-content li.section, .course-content .section.main, .course-content li[id^="section-"]'
   );
-    if (!secs.length) return null;
+  if (!secs.length) return null;
   secs.forEach(sec => {
-    const nameEl = sec.querySelector('.sectionname, h3.sectionname, .section-title');
+    const owned = el => el.closest(sectionSelector) === sec;
+    const nameEl = Array.from(sec.querySelectorAll('.sectionname, .section-title')).find(owned);
     const activities = [];
     sec.querySelectorAll('li.activity').forEach(li => {
+      if (!owned(li)) return;
       const cls = li.className || '';
       const mod = (cls.match(/modtype_(\w+)/) || [])[1] || null;
-      const link = li.querySelector('a[href]');
+      const ownsMetadata = el => owned(el) && el.closest('li.activity') === li;
+      const metadataBoundary = `li.activity, ${sectionSelector}`;
+      const cloneMetadata = el => {
+        const clone = el.cloneNode(true);
+        clone.querySelectorAll(metadataBoundary).forEach(nested => nested.remove());
+        return clone;
+      };
+      const link = Array.from(li.querySelectorAll('a[href]')).find(ownsMetadata);
       // .instancename holds the visible name plus a hidden type label
       // (e.g. "동영상"/"파일") inside .accesshide — strip that for a clean title.
-      const inst = li.querySelector('.instancename');
+      const inst = Array.from(li.querySelectorAll('.instancename')).find(ownsMetadata);
       let title = '';
       let typeLabel = null;
       if (inst) {
-        const clone = inst.cloneNode(true);
+        const clone = cloneMetadata(inst);
         const hidden = clone.querySelector('.accesshide');
         if (hidden) {
           typeLabel = (hidden.innerText || hidden.textContent || '')
@@ -183,13 +193,13 @@ _MATERIALS_JS = r"""
         title = (clone.innerText || clone.textContent || '')
           .replace(/\s+/g, ' ').trim();
       }
-      if (!title) {
-        title = link
-          ? (link.innerText || link.textContent || '').replace(/\s+/g, ' ').trim()
-          : '';
+      if (!title && link) {
+        const textLink = link.querySelector(metadataBoundary) ? cloneMetadata(link) : link;
+        title = (textLink.innerText || textLink.textContent || '').replace(/\s+/g, ' ').trim();
       }
       if (!title && !link) return;
       activities.push({
+        id: li.id || null,
         mod,
         type_label: typeLabel,
         title,
@@ -587,17 +597,35 @@ async def fetch_course_materials(page: Page, course_id: str) -> dict:
     )
 
     sections: list[dict] = []
+    seen_sections: dict[str, dict] = {}
+    seen_activities: dict[str, tuple[int, dict]] = {}
     activity_total = 0
-    for sec in raw_sections:
-        activities = [
-            {
-                "type": a.get("mod"),
-                "title": a.get("title"),
-                "url": a.get("url"),
-            }
-            for a in sec.get("activities", [])
-            if a.get("title") or a.get("url")
-        ]
+    for section_index, sec in enumerate(raw_sections):
+        # Collapse only identical explicit IDs, never titles, weeks or URLs.
+        # Visibility is not identity: collapsed weeks legitimately contain data.
+        # Conflicting copies fail closed instead of choosing by DOM order.
+        sid = sec.get("id")
+        if sid and sid in seen_sections:
+            if seen_sections[sid] != sec:
+                raise ScrapeFailedError("LearnUs 강의자료 구역 ID가 서로 다른 내용으로 중복되었습니다.")
+            continue
+        if sid:
+            seen_sections[sid] = sec
+        activities = []
+        for a in sec.get("activities", []):
+            aid = a.get("id")
+            if aid and aid in seen_activities:
+                if seen_activities[aid] != (section_index, a):
+                    raise ScrapeFailedError("LearnUs 학습활동 ID가 다른 구역 또는 내용으로 중복되었습니다.")
+                continue
+            if aid:
+                seen_activities[aid] = (section_index, a)
+            if a.get("title") or a.get("url"):
+                activities.append({
+                    "type": a.get("mod"),
+                    "title": a.get("title"),
+                    "url": a.get("url"),
+                })
         if not activities and not (sec.get("name") or "").strip():
             continue
         activity_total += len(activities)

@@ -1,6 +1,6 @@
 # 도구 API 참조
 
-**0.6.0b1 소스**의 MCP 도구 38개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
+**0.6.0b2 소스**의 MCP 도구 38개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
 설치와 연결은 [README](../README.md), 구조와 운영 계약은 [DESIGN](../DESIGN.md), 개발·검증 절차는 [개발 문서](DEVELOPMENT.md)를 참고하세요.
 
 ## 기능별 바로가기
@@ -137,7 +137,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 
 인증·출처·캐시: LearnUs 로그인, 강좌 콘텐츠 페이지, 계정·강좌별 1800초.
 반환: `course_id`, `section_count`, `activity_count`, `sections`. 섹션은 `id`, `week`, `name`, `activities`; 활동은 `type`(예: `vod`, `ubfile`, `assign`, `ubboard`), `title`, `url`입니다. 추출하지 못한 값은 `null`일 수 있고 `week=null`은 개요 또는 주차 미확인입니다.
-범위: 주차순으로 정렬하며 `week=null`이 먼저입니다. 활동 메타데이터만 제공하고 파일·영상·과제 내용을 내려받지 않습니다. 수강 자료 링크의 재배포 권한을 부여하는 결과가 아닙니다.
+범위: 주차순으로 정렬하며 `week=null`이 먼저입니다. 강좌 콘텐츠 내부 구역과 각 활동의 소속 구역만 읽습니다. 동일한 명시 ID와 내용의 복제본은 한 번만 세며, 동일 ID의 내용·소속 충돌은 오류로 구분합니다. 제목·주차·URL만 같은 별도 활동을 임의로 합치거나 접힌 주차 전체를 버리지 않습니다. 활동 메타데이터만 제공하고 파일·영상·과제 내용을 내려받지 않습니다. 수강 자료 링크의 재배포 권한을 부여하는 결과가 아닙니다.
 
 ### `get_lms_assignments`
 
@@ -409,7 +409,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 인증·출처·캐시: 도서관 SSO에서 실제 `https://libadm.yonsei.ac.kr:444/fac` UI로 이동. 계정·모든 입력별 60초 캐시. TLS 검증을 유지합니다. 포트 없는 443 주소와 다른 서비스입니다.
 반환: `requested_filters`, 실제 적용한 `selected`, `options`(dates/buildings/groups/facilities/durations), `selection_applied`, `unavailable_selection`, `time_slots`, `count`, `scope="facility_ui"`, `display_verified=true`, `source_url`, `fetched_at`, `note`.
 각 선택지는 `name`, `selectable`, `selected`를 포함하며 날짜에는 ISO `date`, 사용시간에는 정수 `minutes`가 추가됩니다. 인자 없이 목록부터 읽고 필요한 단계의 이름을 다음 호출에 전달하세요. 입력한 필터가 목록에 없으면 오류이며 다른 시설로 대체하지 않습니다.
-모든 조건을 선택하면 시간표의 `start`, `end`, `used_mark`, `display_status`를 반환합니다. `count`는 시간 구간 수이며 시설 수가 아닙니다. 원문 구간 단위와 표시 시간축을 대조하며, `display_status`는 `사용 표시` 또는 `표시 없음`입니다. 표시 없는 구간은 예약 확정이나 이용 자격 확인을 뜻하지 않습니다. 표 머리글·날짜 목록·최종 선택값이 조회 도중 바뀌면 오류로 처리합니다.
+모든 조건을 선택하면 시간표의 `start`, `end`, `used_mark`, `past_mark`, `display_status`를 반환합니다. `count`는 시간 구간 수이며 시설 수가 아닙니다. 원문 구간 단위와 표시 시간축을 대조하며, `used_mark`는 원문 `use`, `past_mark`는 원문 `past` 클래스의 존재이며 정책상 예약 가능 여부를 뜻하지 않습니다. `display_status`는 `사용 표시`, `과거 표시`, 둘 다 있으면 `사용 표시 · 과거 표시`, 둘 다 없으면 `표시 없음`입니다. 표시 없는 구간은 예약 확정이나 이용 자격 확인을 뜻하지 않습니다. 표 머리글·날짜 목록·최종 선택값이 조회 도중 바뀌면 오류로 처리합니다.
 `time_slots=null`, `count=null`은 시간표를 아직 선택하지 않은 상태이며 예약 가능 시간 0건이 아닙니다. 선택 불가 시설은 `selection_applied=false`와 `unavailable_selection`으로 표시합니다. 날짜·건물·그룹·시설·사용시간 선택만 수행하고, 시간대 클릭·참가자 등록·예약 생성/취소는 수행하지 않습니다. 시설 화면에서 GET/HEAD 이외 요청은 차단합니다(정상 SSO 인증 POST는 진입 전에 수행).
 
 ## 학사행정 ERP
@@ -476,7 +476,9 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 | `campus_code` | `string` 또는 `null` | `null` | `s1`, `s3`, `s7`(신촌 학부·대학원·의료원), `s2`, `s4`, `s8`(미래 학부·대학원·의료원); 생략 시 화면 기본값 |
 
 인증·출처·캐시: ERP 로그인, 수강편람 교과목명 검색, 계정·검색 조건별 1800초.
-반환: `keyword`, `filters`, `count`, `fetched_count`, `matching_count`, `requested_filters`, `truncated`, `courses`. `filters`는 실제 조회 요청의 `year`, `term_code`, `campus_code`, `college_code`, `department_code`, `keyword_type` 원천 값(`null` 가능); `requested_filters`는 사용자가 지정한 연도·학기·캠퍼스만 포함합니다.
+반환: `keyword`, `filters`, `count`, `fetched_count`, `matching_count`, `requested_filters`, `truncated`, `courses`와 아래 정합성 정보. `filters`는 실제 조회 요청의 `year`, `term_code`, `campus_code`, `college_code`, `department_code`, `keyword_type` 원천 값(`null` 가능); `requested_filters`는 사용자가 지정한 연도·학기·캠퍼스만 포함합니다.
+정합성: `filters_scope="source_request"`이며 `filters`는 반환 행의 범위를 보장하지 않습니다. `observed_scope`는 명시 필터·출력 상한 적용 전 전체 수신 행에서 관찰한 연도·학기·캠퍼스 값, `filter_consistency`는 그 범위의 필드별 `matched`/`mismatch`/`unverified`와 불일치·미확인 개수를 담습니다. `warnings`를 함께 안내하고 기본 조건과 다른 행을 임의로 재분류하지 마세요. `excluded_count`는 명시 필터 때문에 제외한 원본 행 수입니다. `result_status`의 `source_empty`(수신 0행), `no_matching_rows`(원본은 있지만 명시 조건 일치 0행), `ok`를 구분합니다. 명시 조건 검증 필드가 없거나 유효하지 않으면 오류입니다.
+
 항목: `year`, `term_code`, `course_code`, `section`, `course_name`, `professor`, `credits`, `time_raw`, `room`, `department`, `category`, `campus_code`. 값은 원천 형식이며 누락 필드는 `null`입니다. ERP 과목코드는 LearnUs `course_id`가 아닙니다.
 범위: `fetched_count`는 학교 응답 행 수, `matching_count`는 그 안에서 요청 필터와 일치한 수, `count`는 `limit` 적용 후 수입니다. `truncated`는 일치 수가 상한을 넘거나 응답이 200건 이상이면 참이므로 0건이어도 부재를 단정하지 마세요. 정원·수강인원·강의계획서는 제공하지 않고 수강신청도 하지 않습니다.
 

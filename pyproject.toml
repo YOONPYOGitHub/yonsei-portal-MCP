@@ -1,6 +1,6 @@
 [project]
 name = "yonsei-portal-mcp"
-version = "0.6.0b1"
+version = "0.6.0b2"
 description = "연세대학교 포털/LearnUs/도서관 조회용 MCP 서버 (read-only)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -67,5 +67,5 @@ python_files = ["test_*.py"]
 asyncio_mode = "auto"
 markers = [
     "llm: requires a real LLM provider (skipped when no API key is configured)",
-    "live: hits the real Yonsei portal AND a real LLM (opt-in via RUN_LIVE_LLM=1)",
+    "live: real external integration; portal-only uses RUN_LIVE_PORTAL=1, LLM integration uses RUN_LIVE_LLM=1 (see each test gate)",
 ]

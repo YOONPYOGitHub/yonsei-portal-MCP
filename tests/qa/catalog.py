@@ -46,3 +46,44 @@ def validate_catalog(cases: list[dict], registered_tools: set[str]) -> dict:
     if any(types[tool] != KINDS for tool in registered_tools) or representatives != {tool: 1 for tool in registered_tools}:
         fail()
     return {"questions": len(cases), "tools": len(counts), "representatives": sum(representatives.values())}
+
+
+def validate_markdown(cases: list[dict], text: str) -> dict:
+    """Check the readable catalog's questions, contracts, links and totals."""
+    def fail():
+        raise ValueError("Markdown question catalog differs from JSONL")
+
+    headers = list(re.finditer(r"^#### \[([^\]]+)\]\(questions\.jsonl#L([0-9]+)\)\s*$", text, re.MULTILINE))
+    if len(headers) != len(cases):
+        fail()
+    for index, (case, header) in enumerate(zip(cases, headers), start=1):
+        if header.group(1) != case['id'] or int(header.group(2)) != index:
+            fail()
+        end = headers[index].start() if index < len(headers) else len(text)
+        block = text[header.end():end]
+        questions = re.findall(r'^> (.*)$', block, re.MULTILINE)
+        if questions != [case['question']]:
+            fail()
+        mode = re.search(r'^\*\*[^\n]+\*\* · `([^`]+)` · `([^`]+)`$', block, re.MULTILINE)
+        if not mode or mode.groups() != (case['evaluation_mode'], case['privacy']):
+            fail()
+        behavior = re.search(r'\*\*기대 동작\*\*\n(.*?)\n\n', block, re.DOTALL)
+        if not behavior or behavior.group(1).splitlines() != ['- ' + value for value in case['expected_behavior']]:
+            fail()
+        path = re.search(r'^\*\*도구 경로:\*\* (.*)$', block, re.MULTILINE)
+        if not path or re.findall(r'`([^`]+)`', path.group(1)) != case['expected_tools']:
+            fail()
+    count = len(cases)
+    tools = {case['primary_tool'] for case in cases}
+    reps = sum(case['representative'] for case in cases)
+    if not re.search(rf'실제 MCP 도구 {len(tools)}개,.*총 {count}개', text):
+        fail()
+    if f'| **합계** | **{len(tools)}** | **{reps}** | **{count}** |' not in text:
+        fail()
+    for category in {case['category'] for case in cases}:
+        rows = [case for case in cases if case['category'] == category]
+        expected = (len({case['primary_tool'] for case in rows}), sum(case['representative'] for case in rows), len(rows))
+        match = re.search(r'\| [^\n]*\(`' + re.escape(category) + r'`\) \| ([0-9]+) \| ([0-9]+) \| ([0-9]+) \|', text)
+        if not match or tuple(map(int, match.groups())) != expected:
+            fail()
+    return {'questions': count}

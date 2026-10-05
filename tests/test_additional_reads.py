@@ -662,8 +662,8 @@ def test_facility_timeline_preserves_displayed_usage_without_booking():
     cells = [{"label": "9", "classes": ["times"]}, {"label": "", "classes": ["use"]}, {"label": "10", "classes": ["times"]}]
     result = facilities.parse_timeline(cells, 30)
     assert result == [
-        {"start": "09:00", "end": "09:30", "used_mark": False, "display_status": "표시 없음"},
-        {"start": "09:30", "end": "10:00", "used_mark": True, "display_status": "사용 표시"},
+        {"start": "09:00", "end": "09:30", "used_mark": False, "past_mark": False, "display_status": "표시 없음"},
+        {"start": "09:30", "end": "10:00", "used_mark": True, "past_mark": False, "display_status": "사용 표시"},
     ]
 
 

@@ -463,17 +463,53 @@ async def select_catalog_option(combo, options: list[str], wanted: str) -> None:
 
 
 def parse_course_catalog(data: dict, keyword: str, limit: int, filters: dict, *, requested_filters: Optional[dict] = None) -> dict:
-    """Return the fetched catalog page, not a claimed university-wide total."""
+    """Return a fetched page, preserving source conditions separately from row scope.
+
+    ``filters`` describes the source request, not guaranteed result scope.
+    ``observed_scope`` and ``filter_consistency`` inspect all fetched rows before
+    explicit post-filtering and the local limit. Default disagreements retain
+    source rows; explicitly requested filters still apply before the limit.
+    Observations retain distinct raw values for present fields only. Validation
+    compares nonblank string/integer values without rewriting source codes;
+    ``missing_count`` includes absent, blank and unsupported row values.
+    """
     rows = data.get("dsSles251")
     if not isinstance(rows, list) or any(not isinstance(row, dict) or not {"subjtnb", "subjtNm", "corseDvclsNo"} <= row.keys() for row in rows):
         raise ScrapeFailedError("ERP 수강편람 응답 구조를 확인하지 못했습니다.")
     fetched_count = len(rows)
     requested = {key: value for key, value in (requested_filters or {}).items() if value is not None}
     source_keys = {"year": "syy", "term_code": "smtDivCd", "campus_code": "campsBusnsCd"}
+    observed_scope = {}
+    consistency = {}
+    warnings = []
+    for key, source in source_keys.items():
+        values = []
+        for row in rows:
+            value = row.get(source)
+            if source in row and not any(type(value) is type(seen) and value == seen for seen in values):
+                values.append(value)
+        observed_scope[key] = values
+        expected = requested.get(key, filters.get(key))
+        present = [row[source] for row in rows if type(row.get(source)) in (str, int) and str(row[source]).strip()]
+        missing_count = fetched_count - len(present)
+        has_expected = type(expected) in (str, int) and bool(str(expected).strip())
+        mismatch_count = sum(str(value) != str(expected) for value in present) if has_expected else 0
+        status = "mismatch" if mismatch_count else "unverified" if missing_count or not has_expected or not rows else "matched"
+        consistency[key] = {
+            "expected": expected,
+            "origin": "requested" if key in requested else "source" if key in filters else "unspecified",
+            "status": status, "mismatch_count": mismatch_count, "missing_count": missing_count,
+        }
+        if status == "mismatch":
+            warnings.append(f"{key}: 조회 조건과 원본 행의 범위가 다릅니다. filters는 반환 행의 범위를 보장하지 않습니다.")
+        elif status == "unverified":
+            warnings.append(f"{key}: 조회 조건 또는 원본 행의 검증 가능한 값이 없어 범위를 검증하지 못했습니다.")
     for key in requested:
-        if any(row.get(source_keys[key]) is None for row in rows):
-            raise ScrapeFailedError("검색 결과에 필터 검증용 필드가 없습니다.")
+        if any(type(row.get(source_keys[key])) not in (str, int) or not str(row[source_keys[key]]).strip() for row in rows):
+            raise ScrapeFailedError("검색 결과에 필터 검증용 필드가 없거나 유효하지 않습니다.")
     rows = [row for row in rows if all(str(row[source_keys[key]]) == str(value) for key, value in requested.items())]
+    if fetched_count > len(rows):
+        warnings.append(f"명시적으로 요청한 필터와 다른 원본 행 {fetched_count - len(rows)}개를 제외했습니다. 원본 데이터가 없다는 의미는 아닙니다.")
     fields = {
         "syy": "year", "smtDivCd": "term_code", "subjtnb": "course_code",
         "corseDvclsNo": "section", "subjtNm": "course_name", "cgprfNm": "professor",
@@ -485,6 +521,10 @@ def parse_course_catalog(data: dict, keyword: str, limit: int, filters: dict, *,
     return {
         "keyword": keyword, "filters": filters, "count": len(courses),
         "fetched_count": fetched_count, "matching_count": len(rows),
+        "filters_scope": "source_request", "observed_scope": observed_scope,
+        "filter_consistency": {"scope": "fetched_rows", "fields": consistency},
+        "warnings": warnings, "excluded_count": fetched_count - len(rows),
+        "result_status": "source_empty" if not fetched_count else "ok" if rows else "no_matching_rows",
         "requested_filters": requested, "truncated": len(rows) > limit or fetched_count >= 200,
         "courses": courses,
     }

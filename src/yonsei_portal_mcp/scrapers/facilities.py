@@ -46,16 +46,20 @@ def parse_timeline(cells: list[dict], unit_minutes: int) -> list[dict]:
     for index, cell in enumerate(cells):
         minute = start + index * unit_minutes
         expected_label = str(minute // 60) if minute % 60 == 0 else ""
-        if cell["label"] != expected_label or any(value not in {"times", "use"} for value in cell["classes"]):
+        if cell["label"] != expected_label or any(value not in {"times", "use", "past"} for value in cell["classes"]):
             raise ScrapeFailedError("시설 시간표의 시간 또는 상태 표시가 변경되었습니다.")
         if index == len(cells) - 1:
             break
         used = "use" in cell["classes"]
+        past = "past" in cell["classes"]
+        # Report literal DOM marks, not inferred reservation availability.
+        display_marks = (["사용 표시"] if used else []) + (["과거 표시"] if past else [])
         next_minute = minute + unit_minutes
         slots.append({
             "start": f"{minute // 60:02d}:{minute % 60:02d}",
             "end": f"{next_minute // 60:02d}:{next_minute % 60:02d}",
-            "used_mark": used, "display_status": "사용 표시" if used else "표시 없음",
+            "used_mark": used, "past_mark": past,
+            "display_status": " · ".join(display_marks) or "표시 없음",
         })
     return slots
 

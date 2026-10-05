@@ -6,7 +6,7 @@
 
 ## 1. 개발 환경
 
-현재 소스 버전은 **0.6.0b1**입니다. Python 3.10 이상과 uv를 사용합니다.
+현재 소스 버전은 **0.6.0b2**입니다. Python 3.10 이상과 uv를 사용합니다.
 잠금 환경의 MCP SDK는 **1.30.0**, 패키지 허용 범위는 `>=1.28.1,<2`입니다.
 MCP 2.x와 모든 최소 의존성 조합을 검증했다는 의미는 아닙니다.
 
@@ -199,7 +199,7 @@ repo="$PWD"
 scratch=$(mktemp -d)
 uv venv --python 3.11 "$scratch/venv"
 uv pip install --python "$scratch/venv/bin/python" \
-  "$repo/dist/yonsei_portal_mcp-0.6.0b1-py3-none-any.whl[dev]"
+  "$repo/dist/yonsei_portal_mcp-0.6.0b2-py3-none-any.whl[dev]"
 cd "$scratch"
 "$scratch/venv/bin/python" -c 'from pathlib import Path; Path("wheel-pytest.ini").write_text("[pytest]\nasyncio_mode = auto\n", encoding="utf-8")'
 PYTHON_DOTENV_DISABLED=1 RUN_LIVE_PORTAL=0 RUN_LIVE_LLM=0 \

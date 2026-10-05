@@ -1,6 +1,6 @@
 # 연세대학교 포털 MCP 설계
 
-0.6.0b1 구현의 구조와 개발 제약을 설명합니다. 설치는 [README](README.md),
+0.6.0b2 구현의 구조와 개발 제약을 설명합니다. 설치는 [README](README.md),
 도구별 계약은 [도구 참조](docs/TOOLS.md), 검증·릴리스 절차는 [개발 가이드](docs/DEVELOPMENT.md)를 참고하세요.
 
 ## 1. 범위와 상태

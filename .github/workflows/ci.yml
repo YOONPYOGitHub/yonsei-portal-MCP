@@ -58,6 +58,8 @@ jobs:
       - name: Install native Chromium on macOS and Windows
         if: runner.os != 'Linux'
         run: uv run --no-sync playwright install chromium
+      - name: Static error checks (no style rewrite)
+        run: uv tool run --from ruff==0.14.1 ruff check --no-cache src tests --select E9,F63,F7,F82
       - name: Offline regression tests
         run: uv run --offline --no-sync python -m pytest -m "not live and not llm" -q --tb=short
       - name: Build distributions

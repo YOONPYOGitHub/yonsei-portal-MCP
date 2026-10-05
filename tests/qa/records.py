@@ -14,7 +14,7 @@ import stat
 import uuid
 
 MAX_RECORD_BYTES = 4 * 1024 * 1024
-STATUSES = ("answered", "tool_error", "blocked", "needs_clarification")
+STATUSES = ("answered", "tool_error", "blocked", "needs_clarification", "refused")
 
 
 class RecordError(ValueError):
@@ -181,6 +181,8 @@ class RunStore:
                 raise RecordError("Answer requires successful evidence")
         elif not _text(record.get("reason")):
             raise RecordError("Answer requires reason")
+        if status == "refused" and not _text(record.get("answer")):
+            raise RecordError("Refusal requires answer text")
         if status == "tool_error" and not any(call["is_error"] for call in calls):
             raise RecordError("Tool error requires failed evidence")
         return evidence, calls
@@ -203,13 +205,19 @@ class RunStore:
         _write(self.path / "answers" / (question_id + ".json"), data)
         self._answers[question_id] = hashlib.sha256(data).hexdigest()
 
-    def summarize(self, catalog, selected_ids):
+    def summarize(self, catalog, selected_ids, *, schema_version=1):
         """Validate the complete run and return counts, never private payloads.
 
         Catalog rows require unique id and primary_tool; optional expected_tools
         defaults to [primary_tool]. Their union is the allowed tool registry.
         Unknown or unselected answers fail, rather than silently disappearing.
+        Version 1 preserves the legacy shape by omitting only a ZERO refused
+        count; nonzero refusals are never omitted. Version 2 always includes it.
+        Refusals require answer text and reason, not successful/primary calls;
+        expected_tools=[] forbids any referenced call, including reused calls.
         """
+        if type(schema_version) is not int or schema_version not in (1, 2):
+            raise RecordError("Invalid summary version")
         _read(self.path / "manifest.json", self._manifest_digest)
         if type(catalog) is not list or type(selected_ids) is not list:
             raise RecordError("Invalid catalog or selection")
@@ -278,6 +286,9 @@ class RunStore:
                 if any(not call["is_error"] for call in primary_calls):
                     answered.add(primary)
             counts[record["status"]] += 1
+        # Preserve the legacy zero-count shape for existing summary consumers.
+        if schema_version == 1 and not counts["refused"]:
+            del counts["refused"]
         return {
             "catalog_total": len(questions), "selected_total": len(selected),
             "unselected_not_run": len(questions) - len(selected),
@@ -288,10 +299,10 @@ class RunStore:
 
 
 def seal_run(store, catalog, selected_ids):
-    """Close an append-only run with one exclusive, private checkpoint file."""
-    summary = store.summarize(catalog, selected_ids)
+    """Seal with a version-2 checkpoint and explicit zero refusal count."""
+    summary = store.summarize(catalog, selected_ids, schema_version=2)
     checkpoint = {
-        "version": 1, "catalog": catalog, "selected_ids": selected_ids,
+        "version": 2, "catalog": catalog, "selected_ids": selected_ids,
         "manifest_sha256": store._manifest_digest, "calls": dict(store._calls),
         "answers": dict(store._answers), "summary": summary,
     }
@@ -300,7 +311,12 @@ def seal_run(store, catalog, selected_ids):
 
 
 def verify_archive(path):
-    """Read-only integrity/coverage check after the original process exits.
+    """Read-only CORE integrity/coverage check after the original process exits.
+
+    Checks manifest, calls, answers and checkpoint, not exported reports or
+    snapshots. Use verify_full_archive for the complete exported inventory.
+    Returns a version-2 summary; version-1 receipts normalize only a missing
+    refused count to zero, without rewriting the original sealed files.
 
     The local checkpoint is a trusted-owner receipt, not a signature or proof
     that remote calls happened. Editing both a record and receipt defeats this
@@ -320,9 +336,9 @@ def verify_archive(path):
             data = stream.read(MAX_RECORD_BYTES + 1)
         if len(data) > MAX_RECORD_BYTES:
             raise RecordError("Invalid checkpoint")
-        checkpoint = json.loads(data)
+        checkpoint = json.loads(data, object_pairs_hook=_unique_object)
         fields = {"version", "catalog", "selected_ids", "manifest_sha256", "calls", "answers", "summary"}
-        if type(checkpoint) is not dict or set(checkpoint) != fields or type(checkpoint["version"]) is not int or checkpoint["version"] != 1:
+        if type(checkpoint) is not dict or set(checkpoint) != fields or type(checkpoint["version"]) is not int or checkpoint["version"] not in (1, 2):
             raise RecordError("Invalid checkpoint")
         digest = checkpoint["manifest_sha256"]
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
@@ -338,9 +354,118 @@ def verify_archive(path):
         store = RunStore(path, digest)
         store._calls = checkpoint["calls"]
         store._answers = checkpoint["answers"]
-        summary = store.summarize(checkpoint["catalog"], checkpoint["selected_ids"])
-        if summary != checkpoint["summary"]:
+        summary = store.summarize(checkpoint["catalog"], checkpoint["selected_ids"], schema_version=2)
+        recorded = checkpoint["summary"]
+        if type(recorded) is not dict or type(recorded.get("selected_counts")) is not dict:
+            raise RecordError("Invalid archive summary")
+        if checkpoint["version"] == 1:
+            recorded = dict(recorded, selected_counts=dict(recorded["selected_counts"]))
+            recorded["selected_counts"].setdefault("refused", 0)
+        # Canonical bytes distinguish true/1/1.0 and retain all unknown fields.
+        if _encode(summary) != _encode(recorded):
             raise RecordError("Archive summary mismatch")
         return summary
     except (OSError, TypeError, ValueError, RecursionError):
         raise RecordError("Archive verification failed") from None
+
+
+def _unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise RecordError("Duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def _inventory_path(relative):
+    """Reject path aliases and nonportable components before any file access."""
+    if (not isinstance(relative, str) or not relative
+            or any(char in relative for char in '\\:<>"|?*')
+            or any(ord(char) < 32 or ord(char) == 127 for char in relative)):
+        raise RecordError("Unsafe inventory path")
+    reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+    for part in relative.split("/"):
+        if (part in ("", ".", "..") or part.endswith((".", " "))
+                or part.split(".")[0].upper() in reserved):
+            raise RecordError("Unsafe inventory path")
+
+
+def _export_files(root):
+    """Inventory regular files without following links or ignoring OS errors."""
+    actual, pending = set(), [root]
+    while pending:
+        directory = pending.pop()
+        for path in directory.iterdir():
+            relative = path.relative_to(root).as_posix()
+            _inventory_path(relative)
+            mode = path.lstat().st_mode
+            if stat.S_ISDIR(mode):
+                pending.append(path)
+            elif stat.S_ISREG(mode):
+                actual.add(relative)
+            else:
+                raise RecordError("Unsafe exported file")
+    return actual
+
+
+def verify_full_archive(path):
+    """Read-only checksum check of an exported tree's integrity.json inventory.
+
+    Convention: schema_version=1, algorithm='sha256', a files object mapping
+    relative POSIX paths to lowercase SHA-256 hex digests, and nonempty scope
+    text. All regular files recursively below path must be listed, except the
+    root integrity.json itself. Directory entries are not counted. Scope text
+    is descriptive, never a filter. Includes any archive index, reports,
+    snapshots, reviews and nested core records present in that exported tree.
+
+    Returns only schema_version, algorithm and files_checked. This is inventory
+    checksum coverage, NOT core record validation; invoke verify_archive on each
+    core run separately for semantic/evidence/count checks. No inventory is
+    needed by verify_archive, but it is mandatory here. Never writes files.
+    Owner-controlled checksums do not authenticate origin or remote execution;
+    changing both inventory and payload defeats them. Intended for a quiescent,
+    owner-controlled filesystem, not adversarial concurrent mutation.
+    Root/ancestor/payload/inventory symlinks and special files are rejected.
+    Inventory JSON is limited to 4 MiB; payloads are hashed in bounded chunks.
+    """
+    try:
+        root = Path(path).absolute()
+        if ".." in root.parts:
+            raise RecordError("Unsafe archive")
+        _directory(root)
+        receipt = root / "integrity.json"
+        info = receipt.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_RECORD_BYTES:
+            raise RecordError("Invalid inventory")
+        fd = os.open(receipt, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        with os.fdopen(fd, "rb") as stream:
+            data = stream.read(MAX_RECORD_BYTES + 1)
+        if len(data) > MAX_RECORD_BYTES:
+            raise RecordError("Invalid inventory")
+        inventory = json.loads(data, object_pairs_hook=_unique_object)
+        fields = {"schema_version", "algorithm", "files", "scope"}
+        if (type(inventory) is not dict or set(inventory) != fields
+                or type(inventory["schema_version"]) is not int or inventory["schema_version"] != 1
+                or inventory["algorithm"] != "sha256" or type(inventory["files"]) is not dict
+                or not _text(inventory["scope"])):
+            raise RecordError("Invalid inventory schema")
+        for relative, digest in inventory["files"].items():
+            _inventory_path(relative)
+            if relative == "integrity.json" or not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise RecordError("Invalid inventory entry")
+        actual = _export_files(root)
+        actual.discard("integrity.json")
+        if actual != set(inventory["files"]):
+            raise RecordError("Invalid inventory membership")
+        for relative, digest in inventory["files"].items():
+            fd = os.open(root / relative, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+            sha = hashlib.sha256()
+            with os.fdopen(fd, "rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    sha.update(chunk)
+            if sha.hexdigest() != digest:
+                raise RecordError("Full archive verification failed")
+        return {"schema_version": 1, "algorithm": "sha256", "files_checked": len(inventory["files"])}
+    except (OSError, TypeError, ValueError, KeyError, RecursionError):
+        raise RecordError("Full archive verification failed") from None
