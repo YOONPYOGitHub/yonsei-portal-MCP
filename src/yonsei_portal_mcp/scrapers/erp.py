@@ -547,6 +547,8 @@ async def fetch_course_catalog(page: Page, keyword: str, limit: int = 20, *, yea
                 await year_input.press("ControlOrMeta+A")
                 await year_input.press_sequentially(str(year))
                 await year_input.press("Tab")
+                if await year_input.input_value() != str(year):
+                    raise ScrapeFailedError("수강편람 요청 연도가 화면에 반영되지 않았습니다.")
             await (await updated.value).finished()
     combos = page.locator('.div_search input[role="combobox"]:visible')
     for index, code, choices in ((0, term_code, _CATALOG_TERMS), (1, campus_code, _CATALOG_CAMPUSES)):

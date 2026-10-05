@@ -1,6 +1,6 @@
 # 도구 API 참조
 
-**0.6.0b2 소스**의 MCP 도구 38개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
+**0.6.0b3 소스**의 MCP 도구 38개를 설명합니다. 설치 버전의 입력은 `tools/list`로 확인하세요.
 설치와 연결은 [README](../README.md), 구조와 운영 계약은 [DESIGN](../DESIGN.md), 개발·검증 절차는 [개발 문서](DEVELOPMENT.md)를 참고하세요.
 
 ## 기능별 바로가기
@@ -475,7 +475,7 @@ LearnUs·ERP·개인 도서관 조회는 서버에 설정된 본인 계정으로
 | `term_code` | `string` 또는 `null` | `null` | `10`, `11`, `20`, `21`; 생략 시 화면 기본값 |
 | `campus_code` | `string` 또는 `null` | `null` | `s1`, `s3`, `s7`(신촌 학부·대학원·의료원), `s2`, `s4`, `s8`(미래 학부·대학원·의료원); 생략 시 화면 기본값 |
 
-인증·출처·캐시: ERP 로그인, 수강편람 교과목명 검색, 계정·검색 조건별 1800초.
+인증·출처·캐시: ERP 로그인, 수강편람 교과목명 검색, 계정·검색 조건별 1800초. 연도의 입력 허용 범위는 해당 연도를 학교 화면에서 실제 조회할 수 있다는 보장이 아닙니다. 입력 후 화면 연도가 요청과 다르면 조회 조건 적용 실패로 중단하며, 이를 세션 만료나 자료 0건으로 바꾸지 않습니다.
 반환: `keyword`, `filters`, `count`, `fetched_count`, `matching_count`, `requested_filters`, `truncated`, `courses`와 아래 정합성 정보. `filters`는 실제 조회 요청의 `year`, `term_code`, `campus_code`, `college_code`, `department_code`, `keyword_type` 원천 값(`null` 가능); `requested_filters`는 사용자가 지정한 연도·학기·캠퍼스만 포함합니다.
 정합성: `filters_scope="source_request"`이며 `filters`는 반환 행의 범위를 보장하지 않습니다. `observed_scope`는 명시 필터·출력 상한 적용 전 전체 수신 행에서 관찰한 연도·학기·캠퍼스 값, `filter_consistency`는 그 범위의 필드별 `matched`/`mismatch`/`unverified`와 불일치·미확인 개수를 담습니다. `warnings`를 함께 안내하고 기본 조건과 다른 행을 임의로 재분류하지 마세요. `excluded_count`는 명시 필터 때문에 제외한 원본 행 수입니다. `result_status`의 `source_empty`(수신 0행), `no_matching_rows`(원본은 있지만 명시 조건 일치 0행), `ok`를 구분합니다. 명시 조건 검증 필드가 없거나 유효하지 않으면 오류입니다.
 

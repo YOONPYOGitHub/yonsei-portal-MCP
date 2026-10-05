@@ -1,0 +1,40 @@
+{"id": "human.c01.t01", "conversation_id": "human.c01", "turn": 1, "user": "수업 자료 어디서 보더라"}
+{"id": "human.c01.t02", "conversation_id": "human.c01", "turn": 2, "user": "런어스 이번 학기 거. 과목 이름 좀 보여줘"}
+{"id": "human.c01.t03", "conversation_id": "human.c01", "turn": 3, "user": "보여준 과목 중 맨 위에 거, 자료 뭐 올라왔어?"}
+{"id": "human.c01.t04", "conversation_id": "human.c01", "turn": 4, "user": "그거 영상 말고 파일 링크만 줘"}
+{"id": "human.c02.t01", "conversation_id": "human.c02", "turn": 1, "user": "나 과제 낸 거 맞나"}
+{"id": "human.c02.t02", "conversation_id": "human.c02", "turn": 2, "user": "과목명이 기억 안 나네.. 지금 듣는 거 좀 보여줘"}
+{"id": "human.c02.t03", "conversation_id": "human.c02", "turn": 3, "user": "그중 첫 과목 과제부터 볼래"}
+{"id": "human.c02.t04", "conversation_id": "human.c02", "turn": 4, "user": "과제 나오면 맨 위에 거 제출됐는지 봐줘"}
+{"id": "human.c03.t01", "conversation_id": "human.c03", "turn": 1, "user": "시험 얘기 올라온 거 있나"}
+{"id": "human.c03.t02", "conversation_id": "human.c03", "turn": 2, "user": "런어스 수업 공지 쪽ㅇㅇ"}
+{"id": "human.c03.t03", "conversation_id": "human.c03", "turn": 3, "user": "찾은 글 중 첫 번째 거 내용 좀"}
+{"id": "human.c03.t04", "conversation_id": "human.c03", "turn": 4, "user": "아 시험 말고 휴강 얘기도 찾아봐"}
+{"id": "human.c04.t01", "conversation_id": "human.c04", "turn": 1, "user": "대학원 새 공지 뭐 있나"}
+{"id": "human.c04.t02", "conversation_id": "human.c04", "turn": 2, "user": "인공지능융합대학원 말한거"}
+{"id": "human.c04.t03", "conversation_id": "human.c04", "turn": 3, "user": "거기 보여준 첫 글 자세히 좀"}
+{"id": "human.c04.t04", "conversation_id": "human.c04", "turn": 4, "user": "첨부도 있으면 링크 줘"}
+{"id": "human.c05.t01", "conversation_id": "human.c05", "turn": 1, "user": "머신러닝 책 좀 빌릴까 하는데"}
+{"id": "human.c05.t02", "conversation_id": "human.c05", "turn": 2, "user": "신촌에서, 제목에 머신러닝 들어간 걸로"}
+{"id": "human.c05.t03", "conversation_id": "human.c05", "turn": 3, "user": "방금 보여준 첫 책 어디 꽂혀있어? 빌릴 수 있나"}
+{"id": "human.c05.t04", "conversation_id": "human.c05", "turn": 4, "user": "그럼 그 책 예약해줘"}
+{"id": "human.c06.t01", "conversation_id": "human.c06", "turn": 1, "user": "도서관 자리 있나"}
+{"id": "human.c06.t02", "conversation_id": "human.c06", "turn": 2, "user": "아 혼자 말고 둘이 얘기할 방. 오늘 학술정보관"}
+{"id": "human.c06.t03", "conversation_id": "human.c06", "turn": 3, "user": "보여준 방 중 첫 번째로. 시간은 한 시간 정도"}
+{"id": "human.c06.t04", "conversation_id": "human.c06", "turn": 4, "user": "그럼 예약해줘"}
+{"id": "human.c07.t01", "conversation_id": "human.c07", "turn": 1, "user": "성적 좀 볼수있어?"}
+{"id": "human.c07.t02", "conversation_id": "human.c07", "turn": 2, "user": "과제 점수 말고 학기 끝나고 확정된 거. 2025년 2학기"}
+{"id": "human.c07.t03", "conversation_id": "human.c07", "turn": 3, "user": "평점도 궁금한데 그 학기 것만"}
+{"id": "human.c07.t04", "conversation_id": "human.c07", "turn": 4, "user": "아 누적은 얼마야? 취득학점도 같이"}
+{"id": "human.c08.t01", "conversation_id": "human.c08", "turn": 1, "user": "다음에 들을 만한 AI 수업 뭐 있지"}
+{"id": "human.c08.t02", "conversation_id": "human.c08", "turn": 2, "user": "2027년 1학기 신촌 대학원. 이름에 인공지능 들어간 거"}
+{"id": "human.c08.t03", "conversation_id": "human.c08", "turn": 3, "user": "그중 첫 번째 교수님이랑 학점만 알려줘"}
+{"id": "human.c08.t04", "conversation_id": "human.c08", "turn": 4, "user": "그거 수강신청 해줘"}
+{"id": "human.c09.t01", "conversation_id": "human.c09", "turn": 1, "user": "다가오는 일정 좀 모아서 볼래"}
+{"id": "human.c09.t02", "conversation_id": "human.c09", "turn": 2, "user": "오늘부터 2주, 과제랑 책 반납할 거"}
+{"id": "human.c09.t03", "conversation_id": "human.c09", "turn": 3, "user": "반납은 빼고 캘린더에 넣을 걸로 만들어줘"}
+{"id": "human.c09.t04", "conversation_id": "human.c09", "turn": 4, "user": "그거 구글 캘린더에 바로 넣어줘"}
+{"id": "human.c10.t01", "conversation_id": "human.c10", "turn": 1, "user": "수업도 달력에 반복으로 넣고 싶은데"}
+{"id": "human.c10.t02", "conversation_id": "human.c10", "turn": 2, "user": "2026년 10월 5일부터 12월 18일까지. 내 시간표 먼저 봐줘"}
+{"id": "human.c10.t03", "conversation_id": "human.c10", "turn": 3, "user": "시간은 아직 모르겠네. 그럼 수업 달력은 나중에 하고 학교 학사일정만 볼래"}
+{"id": "human.c10.t04", "conversation_id": "human.c10", "turn": 4, "user": "그 일정에 쉬는 날이면 내 수업도 다 없는 거지?"}

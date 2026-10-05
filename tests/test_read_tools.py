@@ -1423,7 +1423,7 @@ async def test_catalog_year_uses_keyboard_and_waits_for_matching_response(monkey
     monkeypatch.setattr(erp, "_open_menu_and_capture", AsyncMock())
     page = MagicMock()
     field = page.locator.return_value
-    field.input_value = AsyncMock(return_value="2026")
+    field.input_value = AsyncMock(side_effect=["2026", "2025"])
     field.click = AsyncMock()
     field.press = AsyncMock()
     field.press_sequentially = AsyncMock()
